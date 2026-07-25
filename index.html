@@ -1,5 +1,11 @@
 <!DOCTYPE html>
 <!--
+  v1.8-1: v1.7_completeを直接編集せずv1.8_workとしてコピー。
+            社員マスタから梅園ポータルへ戻る常設リンクをヘッダー右上に追加。
+            ログイン前後を問わず表示し、同一タブでポータルへ戻る。
+            HTML側のみ機能追加。GAS処理変更なし、DB変更なし、GASデプロイURL変更なし。
+-->
+<!--
   社員マスタ v1.7_complete
   v1.7-9: v1.7 complete化。v1.7-8の全体確認・固定前整理版を固定保管版として整理。
             版表記のみ更新し、処理変更なし、DB変更なし、GASデプロイURL変更なし。
@@ -50,7 +56,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>社員マスタ v1.7_complete</title>
+  <title>社員マスタ v1.8-1_work</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
@@ -155,6 +161,41 @@
       justify-items: end;
       gap: 10px;
       min-width: 0;
+    }
+
+    .portal-back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 34px;
+      padding: 0 10px;
+      border: 1px solid rgba(185, 203, 224, 0.9);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.68);
+      color: var(--ume-muted);
+      font-size: 0.78rem;
+      font-weight: 800;
+      line-height: 1;
+      text-decoration: none;
+      transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, transform 0.12s ease;
+    }
+
+    .portal-back-link:hover {
+      transform: translateY(-1px);
+      border-color: var(--ume-blue);
+      background: #fff;
+      color: var(--ume-brown);
+    }
+
+    .portal-back-link:focus-visible {
+      outline: 3px solid rgba(49, 93, 153, 0.18);
+      outline-offset: 2px;
+    }
+
+    .portal-back-link svg {
+      width: 15px;
+      height: 15px;
+      flex: 0 0 auto;
     }
 
     .header-account-panel {
@@ -2151,6 +2192,14 @@
         </div>
       </div>
       <div class="header-right">
+        <a
+          class="portal-back-link"
+          href="https://umezono-systems.github.io/umezono-portal/"
+          aria-label="梅園ポータルへ戻る"
+        >
+          <i data-lucide="arrow-left"></i>
+          <span>ポータルへ戻る</span>
+        </a>
         <div id="headerAccountPanel" class="header-account-panel" aria-label="ログイン中のアカウント" hidden>
           <div class="header-account-identity">
             <span class="header-account-icon" aria-hidden="true"><i data-lucide="circle-user-round"></i></span>
@@ -2172,7 +2221,7 @@
           <span id="dataSourceChip" class="status-chip offline"><i data-lucide="lock-keyhole"></i>ログイン後に読込</span>
           <span id="gasStatusChip" class="status-chip offline"><i data-lucide="wifi-off"></i>GAS未接続</span>
           <span id="authStatusChip" class="status-chip warning"><i data-lucide="lock"></i>未ログイン</span>
-          <span id="versionChip" class="status-chip"><i data-lucide="wand-sparkles"></i>v1.7_complete</span>
+          <span id="versionChip" class="status-chip"><i data-lucide="wand-sparkles"></i>v1.8-1_work</span>
         </div>
       </div>
     </header>
@@ -3019,6 +3068,7 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script>
+    // v1.8-1: ヘッダー右上に梅園ポータルへ戻る常設リンクを追加。HTML側のみ変更。GAS処理・DB・デプロイURL変更なし。
     // v1.7-2: 認証セッション失効時の自動ログアウト、GAS側認証拒否時の認証ロック、認証ロック時のモーダルDOM内機微情報破棄を追加。DB変更なし、GASデプロイURL変更なし。
     // v1.6-1: v1.5_completeを直接編集せずv1.6_work作業版としてコピー。版表記のみ更新。処理変更なし、DB変更なし、GASデプロイURL変更なし。
     // v1.5-2: 固定保管説明、設計履歴、手動テスト、診断パネルを通常画面から非表示化。一覧再読込を社員一覧上部へ移動。業務処理、GAS API、DB、デプロイURL変更なし。
@@ -3095,8 +3145,8 @@
     const GAS_DEPLOY_URL = "https://script.google.com/macros/s/AKfycbxOY4thFjX4f43TxXNaCGlh5_HXpgP70xZGyyq9sCemUgNSWCmnMt_8-q2EB1tgLsUMHg/exec"; // GAS WebアプリのデプロイURL。
 
     const APP_CONFIG = {
-      version: "v1.7_complete",
-      modeLabel: "v1.7 complete 固定保管版",
+      version: "v1.8-1_work",
+      modeLabel: "v1.8-1 work 作業版",
       gasEndpoint: GAS_DEPLOY_URL.trim(),
       useSampleFallback: false,
       apiTimeoutMs: 15000,
@@ -8326,7 +8376,7 @@
         validateCurrentAuthSession({ reason: "visibility_resume", minIntervalMs: APP_CONFIG.authSessionFocusValidationMinIntervalMs });
       });
 
-      console.info(`社員マスタ ${APP_CONFIG.version}: ${APP_CONFIG.modeLabel} / 認証コンテキスト世代管理を追加。ログアウト・セッション失効・権限変更・パスワード変更後は、それ以前に開始した認証依存APIの遅延応答を破棄し、古い社員・個人・管理者情報がブラウザ状態へ戻る競合を防止。DB変更なし。`);
+      console.info(`社員マスタ ${APP_CONFIG.version}: ${APP_CONFIG.modeLabel} / ヘッダー右上に梅園ポータルへ戻る常設リンクを追加。GAS処理・DB・デプロイURL変更なし。`);
     }
 
     init();
