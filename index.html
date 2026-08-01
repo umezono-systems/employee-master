@@ -1,5 +1,13 @@
 <!DOCTYPE html>
 <!--
+  v1.8-5: 共通アカウント管理データ取得APIの拡張返却に対応。
+            未発行社員・社員本人用・管理者・紐付け不明・summary・integrityCheckを画面状態へ保持する。
+            既存の管理者パスワード再初期化画面はaccounts互換返却で継続利用する。
+            アカウント管理情報はログイン直後に読まず、管理メニューを開くたび最新取得する。
+            DB変更なし、GASデプロイURL変更なし。
+  v1.8-4: 共通アカウント管理データ取得APIの返却構造・結合・ブロック条件・読込タイミングを仕様整理。
+  v1.8-3: 共通アカウント管理画面・表示情報・操作権限を仕様整理。
+  v1.8-2: 社員本人用共通ログインアカウントの発行・管理方針を仕様整理。
   v1.8-1: v1.7_completeを直接編集せずv1.8_workとしてコピー。
             社員マスタから梅園ポータルへ戻る常設リンクをヘッダー右上に追加。
             ログイン前後を問わず表示し、同一タブでポータルへ戻る。
@@ -56,7 +64,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>社員マスタ v1.8-1_work</title>
+  <title>社員マスタ v1.8-5_work</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
@@ -2221,7 +2229,7 @@
           <span id="dataSourceChip" class="status-chip offline"><i data-lucide="lock-keyhole"></i>ログイン後に読込</span>
           <span id="gasStatusChip" class="status-chip offline"><i data-lucide="wifi-off"></i>GAS未接続</span>
           <span id="authStatusChip" class="status-chip warning"><i data-lucide="lock"></i>未ログイン</span>
-          <span id="versionChip" class="status-chip"><i data-lucide="wand-sparkles"></i>v1.8-1_work</span>
+          <span id="versionChip" class="status-chip"><i data-lucide="wand-sparkles"></i>v1.8-5_work</span>
         </div>
       </div>
     </header>
@@ -3145,7 +3153,7 @@
     const GAS_DEPLOY_URL = "https://script.google.com/macros/s/AKfycbxOY4thFjX4f43TxXNaCGlh5_HXpgP70xZGyyq9sCemUgNSWCmnMt_8-q2EB1tgLsUMHg/exec"; // GAS WebアプリのデプロイURL。
 
     const APP_CONFIG = {
-      version: "v1.8-1_work",
+      version: "v1.8-5_work",
       modeLabel: "v1.8-1 work 作業版",
       gasEndpoint: GAS_DEPLOY_URL.trim(),
       useSampleFallback: false,
@@ -3465,6 +3473,11 @@
       accountManagement: {
         status: "idle",
         accounts: [],
+        employeeAccountRows: [],
+        administratorAccounts: [],
+        orphanAccounts: [],
+        summary: {},
+        integrityCheck: {},
         selectedAccountId: "",
         message: "",
         lastError: "",
@@ -4538,9 +4551,7 @@
         renderAuthStatus();
         refreshIcons();
         await loadInitialData();
-        if (roles.includes("system_admin")) {
-          await loadAccountManagementData({ silent: true });
-        }
+        resetAccountManagementState("管理メニューを開いた時に最新情報を取得します。");
         showToast(state.passwordChange.message);
       } catch (error) {
         if (isDiscardedAuthContextError(error)) return;
@@ -4905,9 +4916,7 @@
         refreshIcons();
         if (!mustChangePassword) {
           await loadInitialData();
-          if (roles.includes("system_admin")) {
-            await loadAccountManagementData({ silent: true });
-          }
+          resetAccountManagementState("管理メニューを開いた時に最新情報を取得します。");
         } else {
           clearEmployeeDataForAuthLock("パスワード変更完了後に社員データを読み込みます。");
         }
@@ -4946,12 +4955,9 @@
       document.body.style.overflow = "hidden";
       renderAccountManagementPanel();
       refreshIcons();
-      const management = state.accountManagement || {};
-      if (!Array.isArray(management.accounts) || !management.accounts.length) {
-        loadAccountManagementData({ silent: true });
-      } else {
+      loadAccountManagementData({ silent: true }).finally(() => {
         window.setTimeout(() => accountAdminTargetSelect?.focus(), 0);
-      }
+      });
     }
 
     function closeAccountAdminModal() {
@@ -4966,6 +4972,11 @@
       state.accountManagement = {
         status: "idle",
         accounts: [],
+        employeeAccountRows: [],
+        administratorAccounts: [],
+        orphanAccounts: [],
+        summary: {},
+        integrityCheck: {},
         selectedAccountId: "",
         message,
         lastError: "",
@@ -5110,26 +5121,59 @@
           auth: buildCurrentAuthPayload(),
         });
         const accounts = Array.isArray(result?.data?.accounts) ? result.data.accounts : [];
+        const employeeAccountRows = Array.isArray(result?.data?.employeeAccountRows)
+          ? result.data.employeeAccountRows
+          : [];
+        const administratorAccounts = Array.isArray(result?.data?.administratorAccounts)
+          ? result.data.administratorAccounts
+          : accounts;
+        const orphanAccounts = Array.isArray(result?.data?.orphanAccounts)
+          ? result.data.orphanAccounts
+          : [];
+        const summary = result?.data?.summary && typeof result.data.summary === "object"
+          ? result.data.summary
+          : {};
+        const integrityCheck = result?.data?.integrityCheck && typeof result.data.integrityCheck === "object"
+          ? result.data.integrityCheck
+          : {};
         state.accountManagement = {
           status: "ready",
           accounts,
+          employeeAccountRows,
+          administratorAccounts,
+          orphanAccounts,
+          summary,
+          integrityCheck,
           selectedAccountId: accounts.find((account) => account.can_reset_password)?.account_id || "",
           message: result.message || `アカウント管理情報を ${accounts.length}件取得しました。`,
           lastError: "",
         };
         appendOperationLog("getAccountManagementData", "ok", state.accountManagement.message, {
-          account_count: accounts.length,
+          compatibility_account_count: accounts.length,
+          employee_account_row_count: employeeAccountRows.length,
+          administrator_account_count: administratorAccounts.length,
+          orphan_account_count: orphanAccounts.length,
+          integrity_status: integrityCheck.status || "",
           password_hash_returned: result?.data?.password_hash_returned === false ? "FALSE" : "未返却確認対象",
+          auth_session_token_returned: result?.data?.auth_session_token_returned === false ? "FALSE" : "未返却確認対象",
         });
         if (!silent) showToast(state.accountManagement.message);
       } catch (error) {
         if (isDiscardedAuthContextError(error)) return;
         const result = error.apiResult || {};
-        const blockers = result?.data?.safetyCheck?.blockers || result?.data?.authorization?.blockers || [];
+        const blockers = result?.data?.integrityCheck?.blockers ||
+          result?.data?.safetyCheck?.blockers ||
+          result?.data?.authorization?.blockers ||
+          [];
         const message = result.message || error.message || "アカウント一覧の取得に失敗しました。";
         state.accountManagement = {
           status: "error",
           accounts: [],
+          employeeAccountRows: [],
+          administratorAccounts: [],
+          orphanAccounts: [],
+          summary: {},
+          integrityCheck: result?.data?.integrityCheck || {},
           selectedAccountId: "",
           message,
           lastError: Array.isArray(blockers) ? blockers.join(" / ") : message,
