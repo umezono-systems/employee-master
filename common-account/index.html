@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<!--
+  梅園共通アカウント設定 v1.8-10_work
+  社員本人用共通アカウントの初回パスワード設定・通常パスワード変更専用画面。
+  社員一覧、個人情報、他社員情報、アプリ権限編集、社員マスタ管理機能は取得・表示しない。
+-->
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#315d99">
+  <title>梅園共通アカウント設定</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      --primary: #315d99;
+      --primary-soft: #eaf1f8;
+      --line: #c5d4e5;
+      --text: #243447;
+      --muted: #617287;
+      --card: #ffffff;
+      --bg: #eef4fa;
+      --success: #287a58;
+      --warning: #866100;
+      --danger: #ae4141;
+      --shadow: 0 18px 48px rgba(36, 52, 71, 0.14);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Noto Sans JP", system-ui, sans-serif;
+      color: var(--text);
+      background: linear-gradient(145deg, #f8fbff 0%, var(--bg) 100%);
+    }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    .shell { width: min(720px, 100%); margin: 0 auto; padding: 24px 16px 48px; }
+    .header {
+      display: flex; align-items: center; justify-content: space-between; gap: 14px;
+      margin-bottom: 18px; padding: 18px 20px; background: rgba(255,255,255,.94);
+      border: 1px solid var(--line); border-radius: 22px; box-shadow: var(--shadow);
+    }
+    .brand { display: flex; align-items: center; gap: 13px; min-width: 0; }
+    .brand-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 15px; background: var(--primary); color: white; flex: 0 0 auto; }
+    h1 { margin: 0; font-size: clamp(1.18rem, 4vw, 1.65rem); font-weight: 800; letter-spacing: .03em; }
+    .subtitle { margin: 3px 0 0; color: var(--muted); font-size: .82rem; }
+    .portal-link { display: inline-flex; align-items: center; gap: 5px; color: var(--primary); font-size: .78rem; font-weight: 800; text-decoration: none; white-space: nowrap; }
+    .card { padding: 24px; border: 1px solid var(--line); border-radius: 22px; background: rgba(255,255,255,.96); box-shadow: var(--shadow); }
+    .panel[hidden] { display: none !important; }
+    .panel-head { text-align: center; margin-bottom: 20px; }
+    .panel-icon { width: 52px; height: 52px; margin: 0 auto 10px; display: grid; place-items: center; border-radius: 16px; background: var(--primary-soft); color: var(--primary); }
+    h2 { margin: 0; color: var(--primary); font-size: 1.18rem; }
+    .note { margin: 7px 0 0; color: var(--muted); font-size: .86rem; line-height: 1.75; }
+    .grid { display: grid; gap: 14px; }
+    .field { display: grid; gap: 6px; }
+    label { color: var(--muted); font-size: .8rem; font-weight: 800; }
+    input { width: 100%; min-height: 46px; padding: 0 13px; border: 1px solid var(--line); border-radius: 12px; background: white; color: var(--text); outline: none; }
+    input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(49,93,153,.14); }
+    .button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 46px; padding: 0 16px; border: 1px solid var(--line); border-radius: 12px; background: white; color: var(--primary); font-weight: 800; }
+    .button.primary { background: var(--primary); border-color: var(--primary); color: white; }
+    .button.ghost { background: transparent; }
+    .button:disabled { opacity: .55; cursor: not-allowed; }
+    .actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 17px; }
+    .actions .button.primary { flex: 1 1 210px; }
+    .identity { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin-bottom: 18px; }
+    .identity-item { padding: 11px 12px; border: 1px solid var(--line); border-radius: 13px; background: #f8fbff; }
+    .identity-label { display: block; margin-bottom: 3px; color: var(--muted); font-size: .72rem; font-weight: 800; }
+    .identity-value { display: block; overflow-wrap: anywhere; font-size: .9rem; font-weight: 800; }
+    .status-box { margin-bottom: 17px; padding: 14px 15px; border: 1px solid #d6e3f1; border-radius: 14px; background: #f3f8fe; line-height: 1.7; }
+    .status-box.warning { border-color: #ead38d; background: #fff8e5; color: #6f5400; }
+    .status-box.success { border-color: #b8dbc9; background: #eef9f3; color: #236747; }
+    .message { min-height: 24px; margin: 15px 0 0; font-size: .85rem; line-height: 1.65; text-align: center; }
+    .message.error { color: var(--danger); }
+    .message.success { color: var(--success); }
+    .message.info { color: var(--primary); }
+    .spinner { animation: spin .85s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .version { margin-top: 14px; color: #8391a2; font-size: .72rem; text-align: center; }
+    @media (max-width: 560px) {
+      .header { align-items: flex-start; padding: 16px; }
+      .portal-link span { display: none; }
+      .card { padding: 20px 16px; }
+      .identity { grid-template-columns: 1fr; }
+      .actions { display: grid; }
+      .actions .button.primary { flex: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="header">
+      <div class="brand">
+        <div class="brand-icon"><i data-lucide="key-round"></i></div>
+        <div>
+          <h1>梅園共通アカウント設定</h1>
+          <p class="subtitle">初回設定・パスワード変更専用</p>
+        </div>
+      </div>
+      <a class="portal-link" href="https://umezono-systems.github.io/umezono-portal/">
+        <i data-lucide="house"></i><span>梅園ポータルへ</span>
+      </a>
+    </header>
+
+    <section id="loginPanel" class="card panel">
+      <div class="panel-head">
+        <div class="panel-icon"><i data-lucide="log-in"></i></div>
+        <h2>共通アカウントへログイン</h2>
+        <p class="note">管理者から案内されたログインIDと仮パスワードを入力してください。</p>
+      </div>
+      <form id="loginForm" class="grid" novalidate>
+        <div class="field">
+          <label for="loginId">ログインID</label>
+          <input id="loginId" name="login_id" autocomplete="username" inputmode="text" required>
+        </div>
+        <div class="field">
+          <label for="loginPassword">パスワード</label>
+          <input id="loginPassword" name="password" type="password" autocomplete="current-password" required>
+        </div>
+        <button id="loginButton" class="button primary" type="submit"><i data-lucide="log-in"></i>ログイン</button>
+      </form>
+      <p id="loginMessage" class="message" aria-live="polite"></p>
+    </section>
+
+    <section id="accountPanel" class="card panel" hidden>
+      <div class="panel-head">
+        <div class="panel-icon"><i data-lucide="shield-check"></i></div>
+        <h2 id="accountPanelTitle">共通アカウント設定</h2>
+        <p id="accountPanelNote" class="note"></p>
+      </div>
+
+      <div class="identity">
+        <div class="identity-item"><span class="identity-label">氏名</span><span id="identityName" class="identity-value">-</span></div>
+        <div class="identity-item"><span class="identity-label">社員番号</span><span id="identityEmployeeNo" class="identity-value">-</span></div>
+        <div class="identity-item"><span class="identity-label">ログインID</span><span id="identityLoginId" class="identity-value">-</span></div>
+      </div>
+
+      <div id="accountStatusBox" class="status-box"></div>
+
+      <form id="passwordForm" class="grid" novalidate>
+        <div class="field">
+          <label for="currentPassword">現在のパスワード</label>
+          <input id="currentPassword" type="password" autocomplete="current-password" required>
+        </div>
+        <div class="field">
+          <label for="newPassword">新しいパスワード</label>
+          <input id="newPassword" type="password" autocomplete="new-password" minlength="8" maxlength="64" required>
+        </div>
+        <div class="field">
+          <label for="newPasswordConfirm">新しいパスワード（確認）</label>
+          <input id="newPasswordConfirm" type="password" autocomplete="new-password" minlength="8" maxlength="64" required>
+        </div>
+        <div class="actions">
+          <button id="passwordButton" class="button primary" type="submit"><i data-lucide="key-round"></i>パスワードを設定</button>
+          <button id="logoutButton" class="button ghost" type="button"><i data-lucide="log-out"></i>ログアウト</button>
+        </div>
+      </form>
+      <p id="accountMessage" class="message" aria-live="polite"></p>
+    </section>
+
+    <p class="version">v1.8-10_work</p>
+  </main>
+
+  <script>
+    "use strict";
+    const APP_CONFIG = {
+      version: "v1.8-10_work",
+      gasEndpoint: "https://script.google.com/macros/s/AKfycbxOY4thFjX4f43TxXNaCGlh5_HXpgP70xZGyyq9sCemUgNSWCmnMt_8-q2EB1tgLsUMHg/exec",
+      apiTimeoutMs: 15000,
+      sessionValidationIntervalMs: 15 * 60 * 1000,
+      focusValidationMinIntervalMs: 60 * 1000,
+      actions: {
+        login: "loginCommonAccount",
+        changePassword: "changeCommonAccountPassword",
+        validateSession: "validateCommonAccountSession",
+        logout: "logoutCommonAccount",
+      },
+    };
+
+    const state = { auth: null, lastValidationAt: 0, validationTimer: null, busy: false };
+    const el = {
+      loginPanel: document.getElementById("loginPanel"),
+      accountPanel: document.getElementById("accountPanel"),
+      loginForm: document.getElementById("loginForm"),
+      loginId: document.getElementById("loginId"),
+      loginPassword: document.getElementById("loginPassword"),
+      loginButton: document.getElementById("loginButton"),
+      loginMessage: document.getElementById("loginMessage"),
+      accountPanelTitle: document.getElementById("accountPanelTitle"),
+      accountPanelNote: document.getElementById("accountPanelNote"),
+      identityName: document.getElementById("identityName"),
+      identityEmployeeNo: document.getElementById("identityEmployeeNo"),
+      identityLoginId: document.getElementById("identityLoginId"),
+      accountStatusBox: document.getElementById("accountStatusBox"),
+      passwordForm: document.getElementById("passwordForm"),
+      currentPassword: document.getElementById("currentPassword"),
+      newPassword: document.getElementById("newPassword"),
+      newPasswordConfirm: document.getElementById("newPasswordConfirm"),
+      passwordButton: document.getElementById("passwordButton"),
+      logoutButton: document.getElementById("logoutButton"),
+      accountMessage: document.getElementById("accountMessage"),
+    };
+
+    function refreshIcons() { if (window.lucide) window.lucide.createIcons(); }
+    function setMessage(target, text = "", type = "") { target.textContent = text; target.className = `message ${type}`.trim(); }
+    function loadingIcon() { return '<i class="spinner" data-lucide="loader-circle"></i>'; }
+    function setButtonBusy(button, busy, label, icon = "loader-circle") {
+      button.disabled = busy;
+      button.setAttribute("aria-busy", String(busy));
+      button.innerHTML = busy ? `${loadingIcon()}${label}` : `<i data-lucide="${icon}"></i>${label}`;
+      refreshIcons();
+    }
+    function clearPasswordInputs() {
+      el.loginPassword.value = "";
+      el.currentPassword.value = "";
+      el.newPassword.value = "";
+      el.newPasswordConfirm.value = "";
+    }
+    function buildAuthPayload() {
+      if (!state.auth) return {};
+      return {
+        account_id: state.auth.account_id,
+        employee_id: state.auth.employee_id,
+        login_id: state.auth.login_id,
+        session_scope: state.auth.session_scope,
+        auth_session_token: state.auth.auth_session_token,
+      };
+    }
+    async function fetchWithTimeout(url, options, timeoutMs) {
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+      try { return await fetch(url, { ...options, signal: controller.signal }); }
+      catch (error) {
+        if (error.name === "AbortError") throw new Error("通信がタイムアウトしました。しばらくしてから再操作してください。");
+        throw error;
+      } finally { window.clearTimeout(timer); }
+    }
+    async function callApi(action, payload = {}) {
+      const response = await fetchWithTimeout(APP_CONFIG.gasEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action, version: APP_CONFIG.version, payload }),
+      }, APP_CONFIG.apiTimeoutMs);
+      if (!response.ok) throw new Error(`通信に失敗しました。status=${response.status}`);
+      const result = await response.json();
+      if (!result || result.status !== "ok") {
+        const detail = result?.data?.safetyCheck?.blockers?.[0] || "";
+        throw new Error(detail || result?.message || "処理を完了できませんでした。");
+      }
+      return result;
+    }
+    function applyAuth(auth) {
+      state.auth = { ...auth };
+      state.lastValidationAt = Date.now();
+      renderAccountPanel();
+      scheduleValidation();
+    }
+    function renderAccountPanel() {
+      const auth = state.auth;
+      if (!auth) {
+        el.loginPanel.hidden = false;
+        el.accountPanel.hidden = true;
+        return;
+      }
+      el.loginPanel.hidden = true;
+      el.accountPanel.hidden = false;
+      el.identityName.textContent = auth.account_name || "-";
+      el.identityEmployeeNo.textContent = auth.employee_no || "-";
+      el.identityLoginId.textContent = auth.login_id || "-";
+      const first = Boolean(auth.must_change_password);
+      el.accountPanelTitle.textContent = first ? "初回パスワード設定" : "共通アカウント設定済み";
+      el.accountPanelNote.textContent = first
+        ? "仮パスワードから、ご本人だけが分かる新しいパスワードへ変更してください。"
+        : "現在のパスワードを確認して、新しいパスワードへ変更できます。";
+      el.accountStatusBox.className = `status-box ${first ? "warning" : "success"}`;
+      el.accountStatusBox.textContent = first
+        ? "初回設定が完了するまで、梅園レシピ帳などの共通アカウント利用は開始できません。"
+        : "共通アカウントのパスワードは設定済みです。利用できるアプリは、各アプリ側で登録された権限によって決まります。";
+      el.passwordButton.innerHTML = `<i data-lucide="key-round"></i>${first ? "初回パスワードを設定" : "パスワードを変更"}`;
+      refreshIcons();
+    }
+    function resetToLogin(message = "", type = "") {
+      if (state.validationTimer) window.clearInterval(state.validationTimer);
+      state.validationTimer = null;
+      state.auth = null;
+      state.lastValidationAt = 0;
+      state.busy = false;
+      clearPasswordInputs();
+      el.passwordForm.reset();
+      renderAccountPanel();
+      if (message) setMessage(el.loginMessage, message, type);
+    }
+    function scheduleValidation() {
+      if (state.validationTimer) window.clearInterval(state.validationTimer);
+      state.validationTimer = window.setInterval(() => validateSession(false), APP_CONFIG.sessionValidationIntervalMs);
+    }
+    async function validateSession(showMessage) {
+      if (!state.auth || state.busy) return;
+      state.busy = true;
+      try {
+        const result = await callApi(APP_CONFIG.actions.validateSession, { auth: buildAuthPayload() });
+        state.auth = { ...state.auth, ...result.data.auth };
+        state.lastValidationAt = Date.now();
+        renderAccountPanel();
+        if (showMessage) setMessage(el.accountMessage, "認証状態を確認しました。", "info");
+      } catch (error) {
+        resetToLogin("認証状態を確認できなくなりました。再ログインしてください。", "error");
+      } finally { state.busy = false; }
+    }
+
+    el.loginForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (state.busy) return;
+      const loginId = el.loginId.value.trim();
+      const password = el.loginPassword.value;
+      if (!loginId || !password) { setMessage(el.loginMessage, "ログインIDとパスワードを入力してください。", "error"); return; }
+      state.busy = true;
+      setButtonBusy(el.loginButton, true, "確認中");
+      setMessage(el.loginMessage, "アカウントを確認しています。", "info");
+      try {
+        const result = await callApi(APP_CONFIG.actions.login, { login_id: loginId, password });
+        clearPasswordInputs();
+        setMessage(el.loginMessage);
+        applyAuth(result.data.auth);
+        el.currentPassword.focus();
+      } catch (error) {
+        clearPasswordInputs();
+        setMessage(el.loginMessage, error.message, "error");
+      } finally {
+        state.busy = false;
+        setButtonBusy(el.loginButton, false, "ログイン", "log-in");
+      }
+    });
+
+    el.passwordForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!state.auth || state.busy) return;
+      const current = el.currentPassword.value;
+      const next = el.newPassword.value;
+      const confirm = el.newPasswordConfirm.value;
+      const errors = [];
+      if (!current || !next || !confirm) errors.push("すべてのパスワード欄を入力してください。");
+      if (next && (next.length < 8 || next.length > 64)) errors.push("新しいパスワードは8文字以上64文字以下で入力してください。");
+      if (next.trim() !== next) errors.push("新しいパスワードの先頭・末尾に空白は使用できません。");
+      if (next !== confirm) errors.push("新しいパスワードと確認入力が一致しません。");
+      if (current && next && current === next) errors.push("新しいパスワードは現在のパスワードと異なる内容にしてください。");
+      if (errors.length) { setMessage(el.accountMessage, errors[0], "error"); return; }
+
+      const wasFirst = Boolean(state.auth.must_change_password);
+      state.busy = true;
+      setButtonBusy(el.passwordButton, true, "変更中");
+      setMessage(el.accountMessage, "パスワードを安全に更新しています。", "info");
+      try {
+        const result = await callApi(APP_CONFIG.actions.changePassword, {
+          auth: buildAuthPayload(),
+          current_password: current,
+          new_password: next,
+          new_password_confirm: confirm,
+        });
+        clearPasswordInputs();
+        applyAuth(result.data.auth);
+        setMessage(el.accountMessage, wasFirst
+          ? "初回パスワード設定が完了しました。現在、利用可能なアプリが未登録の場合は、各アプリの管理者による登録後に利用できます。"
+          : "パスワードを変更しました。", "success");
+      } catch (error) {
+        clearPasswordInputs();
+        setMessage(el.accountMessage, error.message, "error");
+      } finally {
+        state.busy = false;
+        const label = state.auth?.must_change_password ? "初回パスワードを設定" : "パスワードを変更";
+        setButtonBusy(el.passwordButton, false, label, "key-round");
+      }
+    });
+
+    el.logoutButton.addEventListener("click", async () => {
+      if (!state.auth || state.busy) return;
+      state.busy = true;
+      el.logoutButton.disabled = true;
+      try { await callApi(APP_CONFIG.actions.logout, { auth: buildAuthPayload() }); }
+      catch (error) { /* local state is cleared even if the remote session has expired */ }
+      finally {
+        resetToLogin("ログアウトしました。", "success");
+        el.logoutButton.disabled = false;
+      }
+    });
+
+    window.addEventListener("focus", () => {
+      if (state.auth && Date.now() - state.lastValidationAt >= APP_CONFIG.focusValidationMinIntervalMs) validateSession(false);
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden && state.auth && Date.now() - state.lastValidationAt >= APP_CONFIG.focusValidationMinIntervalMs) validateSession(false);
+    });
+
+    refreshIcons();
+    renderAccountPanel();
+  </script>
+</body>
+</html>

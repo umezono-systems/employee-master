@@ -1,5 +1,10 @@
 <!DOCTYPE html>
 <!--
+  v1.8-10: GAS側へ社員本人用共通アカウント専用のログイン・パスワード変更・セッション確認・ログアウトAPIを追加。
+             一般社員向け設定画面は別HTMLで提供するため、社員マスタ管理画面の業務UI・権限・読込範囲は変更しない。
+             DB変更なし、GASデプロイURL変更なし。
+-->
+<!--
   v1.8-8b: 共通アカウント発行時のaccount_idが、_sys_account_roleに残る孤立role行と衝突し、
              社員本人用アカウントが社員マスタ管理者扱いになる問題へ対応。
              role競合アカウントは一般社員一覧から消さず「要対応」で表示し、今後の採番はrole行のIDも予約済みとして扱う。
@@ -91,7 +96,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>社員マスタ v1.8-8b_work</title>
+  <title>社員マスタ v1.8-10_work</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
@@ -3746,8 +3751,8 @@
     const GAS_DEPLOY_URL = "https://script.google.com/macros/s/AKfycbxOY4thFjX4f43TxXNaCGlh5_HXpgP70xZGyyq9sCemUgNSWCmnMt_8-q2EB1tgLsUMHg/exec"; // GAS WebアプリのデプロイURL。
 
     const APP_CONFIG = {
-      version: "v1.8-8b_work",
-      modeLabel: "v1.8-8 work 作業版",
+      version: "v1.8-10_work",
+      modeLabel: "v1.8-10 work 作業版",
       gasEndpoint: GAS_DEPLOY_URL.trim(),
       useSampleFallback: false,
       apiTimeoutMs: 15000,
@@ -3770,6 +3775,10 @@
         getAccountManagementData: "getAccountManagementData",
         createEmployeeCommonAccount: "createEmployeeCommonAccount",
         resetEmployeeAccountPassword: "resetEmployeeAccountPassword",
+        loginCommonAccount: "loginCommonAccount",
+        changeCommonAccountPassword: "changeCommonAccountPassword",
+        validateCommonAccountSession: "validateCommonAccountSession",
+        logoutCommonAccount: "logoutCommonAccount",
       },
       expectedSheets: [
         { key: "employee", label: "m_employee", required: true, purpose: "社員基本情報" },
