@@ -1,5 +1,11 @@
 <!DOCTYPE html>
 <!--
+  v1.8-8: 社員本人用共通アカウント発行画面を追加し、createEmployeeCommonAccount APIへ接続。
+            system_admin本人パスワード再確認、login_id・仮パスワード検証、request_id冪等制御、
+            発行後の一覧再取得と初回設定待ち表示まで対応。アプリ権限は発行時に追加しない。
+            HTML・GAS処理追加、DB変更なし、GASデプロイURL変更なし。
+-->
+<!--
   v1.8-6b: ログイン認証中・社員データ読込中・管理情報読込中などの loader-2 アイコンへ回転アニメーションを追加。
              読込状態のステータス表示にも回転アイコンを使用し、処理中をフリーズと誤認しにくくする。
              HTML側のみ修正。GAS処理変更なし、DB変更なし、GASデプロイURL変更なし。
@@ -74,7 +80,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>社員マスタ v1.8-6b_work</title>
+  <title>社員マスタ v1.8-8_work</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
@@ -1233,6 +1239,73 @@
       display: block;
     }
 
+    .common-account-issue-backdrop {
+      z-index: 25;
+      background: rgba(28, 42, 59, 0.62);
+    }
+
+    .common-account-issue-modal {
+      width: min(720px, 100%);
+    }
+
+    .common-account-issue-summary {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+      padding: 14px;
+      border: 1px solid var(--ume-line);
+      border-radius: var(--radius-md);
+      background: var(--ume-cream);
+    }
+
+    .common-account-issue-summary-item {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .common-account-issue-summary-item span {
+      color: var(--ume-muted);
+      font-size: 0.76rem;
+      font-weight: 800;
+    }
+
+    .common-account-issue-summary-item strong {
+      overflow-wrap: anywhere;
+      color: var(--ume-text);
+      font-size: 0.92rem;
+    }
+
+    .common-account-issue-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .common-account-issue-grid .full {
+      grid-column: 1 / -1;
+    }
+
+    .common-account-issue-note {
+      margin: 14px 0 0;
+      padding: 11px 12px;
+      border: 1px solid #d6e3f1;
+      border-radius: 12px;
+      background: #f3f8fe;
+      color: #3f5f84;
+      font-size: 0.84rem;
+      line-height: 1.7;
+    }
+
+    .common-account-issue-message {
+      min-height: 22px;
+      margin: 12px 0 0;
+      color: var(--ume-muted);
+      font-size: 0.84rem;
+      line-height: 1.7;
+    }
+
     .account-admin-modal {
       width: min(1180px, 100%);
     }
@@ -2222,6 +2295,15 @@
 
       .account-admin-grid {
         grid-template-columns: 1fr;
+      }
+
+      .common-account-issue-summary,
+      .common-account-issue-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .common-account-issue-grid .full {
+        grid-column: auto;
       }
 
       .account-admin-actions .button {
@@ -3420,6 +3502,69 @@
     </article>
   </div>
 
+  <div id="commonAccountIssueModalBackdrop" class="modal-backdrop common-account-issue-backdrop" role="dialog"
+    aria-modal="true" aria-labelledby="commonAccountIssueModalTitle">
+    <article class="modal common-account-issue-modal">
+      <header class="modal-header">
+        <div class="modal-title-group">
+          <span class="modal-title-icon" aria-hidden="true"><i data-lucide="user-plus"></i></span>
+          <div class="modal-title-copy">
+            <h2 id="commonAccountIssueModalTitle" class="modal-title">共通アカウント発行</h2>
+            <p class="modal-subtitle">社員本人用の共通ログインアカウントを発行します</p>
+          </div>
+        </div>
+        <button id="closeCommonAccountIssueModalButton" class="button ghost" type="button"
+          aria-label="共通アカウント発行画面を閉じる">
+          <i data-lucide="x"></i>閉じる
+        </button>
+      </header>
+      <div class="modal-body">
+        <div id="commonAccountIssueTargetSummary" class="common-account-issue-summary"></div>
+
+        <div class="common-account-issue-grid">
+          <div class="field full">
+            <label for="commonAccountIssueLoginIdInput">ログインID</label>
+            <input id="commonAccountIssueLoginIdInput" class="input" type="text" maxlength="64"
+              autocomplete="off" placeholder="社員番号を初期値として使用" />
+          </div>
+          <div class="field full">
+            <label for="commonAccountIssueAdministratorPasswordInput">管理者自身の現在のパスワード</label>
+            <input id="commonAccountIssueAdministratorPasswordInput" class="input" type="password"
+              autocomplete="current-password" placeholder="発行を実行する管理者本人のパスワード" />
+          </div>
+          <div class="field">
+            <label for="commonAccountIssueTemporaryPasswordInput">本人用仮パスワード</label>
+            <input id="commonAccountIssueTemporaryPasswordInput" class="input" type="password"
+              autocomplete="new-password" placeholder="8～64文字" />
+          </div>
+          <div class="field">
+            <label for="commonAccountIssueTemporaryPasswordConfirmInput">本人用仮パスワード（確認）</label>
+            <input id="commonAccountIssueTemporaryPasswordConfirmInput" class="input" type="password"
+              autocomplete="new-password" placeholder="もう一度入力" />
+          </div>
+        </div>
+
+        <p class="common-account-issue-note">
+          発行後は本人による初回パスワード変更が必要です。この操作では梅園レシピ帳などのアプリ権限は追加しません。
+        </p>
+        <p id="commonAccountIssueMessage" class="common-account-issue-message" role="status">
+          対象社員と入力内容を確認して発行してください。
+        </p>
+      </div>
+      <footer class="modal-footer">
+        <button id="commonAccountIssueClearButton" class="button ghost" type="button">
+          <i data-lucide="eraser"></i>入力をクリア
+        </button>
+        <button id="cancelCommonAccountIssueModalButton" class="button" type="button">
+          <i data-lucide="undo-2"></i>キャンセル
+        </button>
+        <button id="commonAccountIssueSubmitButton" class="button primary" type="button">
+          <i data-lucide="user-plus"></i>共通アカウントを発行
+        </button>
+      </footer>
+    </article>
+  </div>
+
   <div id="detailModalBackdrop" class="modal-backdrop" role="dialog" aria-modal="true"
     aria-labelledby="detailModalTitle">
     <article class="modal employee-modal">
@@ -3590,8 +3735,8 @@
     const GAS_DEPLOY_URL = "https://script.google.com/macros/s/AKfycbxOY4thFjX4f43TxXNaCGlh5_HXpgP70xZGyyq9sCemUgNSWCmnMt_8-q2EB1tgLsUMHg/exec"; // GAS WebアプリのデプロイURL。
 
     const APP_CONFIG = {
-      version: "v1.8-6b_work",
-      modeLabel: "v1.8-6b work 作業版",
+      version: "v1.8-8_work",
+      modeLabel: "v1.8-8 work 作業版",
       gasEndpoint: GAS_DEPLOY_URL.trim(),
       useSampleFallback: false,
       apiTimeoutMs: 15000,
@@ -3612,6 +3757,7 @@
         validateAuthSession: "validateAuthSession",
         changeEmployeePassword: "changeEmployeePassword",
         getAccountManagementData: "getAccountManagementData",
+        createEmployeeCommonAccount: "createEmployeeCommonAccount",
         resetEmployeeAccountPassword: "resetEmployeeAccountPassword",
       },
       expectedSheets: [
@@ -3924,6 +4070,12 @@
         message: "",
         lastError: "",
       },
+      commonAccountIssue: {
+        status: "idle",
+        employeeId: "",
+        message: "",
+        lastError: "",
+      },
       editMode: "create",
       editingEmployeeId: null,
       editingSourceVersion: null,
@@ -3998,6 +4150,17 @@
     const commonAccountMobileList = document.getElementById("commonAccountMobileList");
     const commonAccountEmpty = document.getElementById("commonAccountEmpty");
     const commonAccountMessage = document.getElementById("commonAccountMessage");
+    const commonAccountIssueModalBackdrop = document.getElementById("commonAccountIssueModalBackdrop");
+    const commonAccountIssueTargetSummary = document.getElementById("commonAccountIssueTargetSummary");
+    const commonAccountIssueLoginIdInput = document.getElementById("commonAccountIssueLoginIdInput");
+    const commonAccountIssueAdministratorPasswordInput = document.getElementById("commonAccountIssueAdministratorPasswordInput");
+    const commonAccountIssueTemporaryPasswordInput = document.getElementById("commonAccountIssueTemporaryPasswordInput");
+    const commonAccountIssueTemporaryPasswordConfirmInput = document.getElementById("commonAccountIssueTemporaryPasswordConfirmInput");
+    const commonAccountIssueMessage = document.getElementById("commonAccountIssueMessage");
+    const commonAccountIssueSubmitButton = document.getElementById("commonAccountIssueSubmitButton");
+    const commonAccountIssueClearButton = document.getElementById("commonAccountIssueClearButton");
+    const closeCommonAccountIssueModalButton = document.getElementById("closeCommonAccountIssueModalButton");
+    const cancelCommonAccountIssueModalButton = document.getElementById("cancelCommonAccountIssueModalButton");
     const accountAdminPanel = document.getElementById("accountAdminPanel");
     const accountAdminStatusChip = document.getElementById("accountAdminStatusChip");
     const accountAdminTargetSelect = document.getElementById("accountAdminTargetSelect");
@@ -5431,7 +5594,9 @@
     function closeAccountAdminModal() {
       if (!accountAdminModalBackdrop) return;
       accountAdminModalBackdrop.classList.remove("is-open");
+      commonAccountIssueModalBackdrop?.classList.remove("is-open");
       clearAccountManagementInputs();
+      resetCommonAccountIssueState();
       document.body.style.overflow = "";
       headerAdminMenuButton?.focus();
     }
@@ -5454,6 +5619,225 @@
         message,
         lastError: "",
       };
+      if (commonAccountIssueModalBackdrop?.classList.contains("is-open")) {
+        commonAccountIssueModalBackdrop.classList.remove("is-open");
+      }
+      resetCommonAccountIssueState();
+    }
+
+    function resetCommonAccountIssueState(message = "") {
+      state.commonAccountIssue = {
+        status: "idle",
+        employeeId: "",
+        message,
+        lastError: "",
+      };
+      clearCommonAccountIssueInputs({ keepLoginId: false });
+    }
+
+    function clearCommonAccountIssueInputs({ keepLoginId = true } = {}) {
+      if (!keepLoginId && commonAccountIssueLoginIdInput) commonAccountIssueLoginIdInput.value = "";
+      if (commonAccountIssueAdministratorPasswordInput) commonAccountIssueAdministratorPasswordInput.value = "";
+      if (commonAccountIssueTemporaryPasswordInput) commonAccountIssueTemporaryPasswordInput.value = "";
+      if (commonAccountIssueTemporaryPasswordConfirmInput) commonAccountIssueTemporaryPasswordConfirmInput.value = "";
+    }
+
+    function getCommonAccountIssueTarget() {
+      const employeeId = toText(state.commonAccountIssue?.employeeId).trim();
+      return getCommonEmployeeRows().find(
+        (row) => toText(row.employee_id).trim() === employeeId
+      ) || null;
+    }
+
+    function openCommonAccountIssueModal(row) {
+      if (!row?.actions?.can_issue) {
+        showToast("この社員には現在、共通アカウントを発行できません。最新情報を再読込してください。");
+        return;
+      }
+      state.commonAccountIssue = {
+        status: "idle",
+        employeeId: toText(row.employee_id).trim(),
+        message: "対象社員と入力内容を確認して発行してください。",
+        lastError: "",
+      };
+      if (commonAccountIssueLoginIdInput) commonAccountIssueLoginIdInput.value = toText(row.employee_no).trim();
+      clearCommonAccountIssueInputs({ keepLoginId: true });
+      commonAccountIssueModalBackdrop?.classList.add("is-open");
+      document.body.style.overflow = "hidden";
+      renderCommonAccountIssueModal();
+      refreshIcons();
+      window.setTimeout(() => commonAccountIssueLoginIdInput?.focus(), 0);
+    }
+
+    function closeCommonAccountIssueModal() {
+      commonAccountIssueModalBackdrop?.classList.remove("is-open");
+      resetCommonAccountIssueState();
+      document.body.style.overflow = accountAdminModalBackdrop?.classList.contains("is-open") ? "hidden" : "";
+      commonAccountKeywordInput?.focus();
+    }
+
+    function renderCommonAccountIssueModal() {
+      const issue = state.commonAccountIssue || {};
+      const target = getCommonAccountIssueTarget();
+      const busy = issue.status === "submitting";
+      const belonging = target
+        ? [target.department_name, target.workplace_name, target.section_name].filter(Boolean).join(" / ") || "—"
+        : "—";
+
+      if (commonAccountIssueTargetSummary) {
+        commonAccountIssueTargetSummary.innerHTML = target
+          ? [
+              ["社員番号", target.employee_no || "—"],
+              ["氏名", target.display_name || "—"],
+              ["employee_id", target.employee_id || "—"],
+              ["所属", belonging],
+            ].map(([label, value]) => `<div class="common-account-issue-summary-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("")
+          : '<div class="common-account-issue-summary-item"><span>対象</span><strong>対象社員を確認できません</strong></div>';
+      }
+
+      [
+        commonAccountIssueLoginIdInput,
+        commonAccountIssueAdministratorPasswordInput,
+        commonAccountIssueTemporaryPasswordInput,
+        commonAccountIssueTemporaryPasswordConfirmInput,
+        commonAccountIssueClearButton,
+        cancelCommonAccountIssueModalButton,
+        closeCommonAccountIssueModalButton,
+      ].filter(Boolean).forEach((element) => { element.disabled = busy; });
+
+      if (commonAccountIssueSubmitButton) {
+        commonAccountIssueSubmitButton.disabled = busy || !target;
+        commonAccountIssueSubmitButton.innerHTML = busy
+          ? '<i data-lucide="loader-2"></i>発行中'
+          : '<i data-lucide="user-plus"></i>共通アカウントを発行';
+        commonAccountIssueSubmitButton.setAttribute("aria-busy", busy ? "true" : "false");
+      }
+      if (commonAccountIssueMessage) {
+        commonAccountIssueMessage.textContent = issue.message || "対象社員と入力内容を確認して発行してください。";
+      }
+    }
+
+    function buildCommonAccountIssueClientBlockers() {
+      const target = getCommonAccountIssueTarget();
+      const loginId = toText(commonAccountIssueLoginIdInput?.value);
+      const administratorPassword = toText(commonAccountIssueAdministratorPasswordInput?.value);
+      const temporaryPassword = toText(commonAccountIssueTemporaryPasswordInput?.value);
+      const temporaryPasswordConfirm = toText(commonAccountIssueTemporaryPasswordConfirmInput?.value);
+      const blockers = [];
+
+      if (!hasSystemAdminAccess()) blockers.push("共通アカウント発行には system_admin 権限が必要です。");
+      if (!target) blockers.push("対象社員を確認できません。管理画面を再読み込みしてください。");
+      if (target && !target.actions?.can_issue) blockers.push("この社員には現在、共通アカウントを発行できません。");
+      if (!loginId) blockers.push("ログインIDを入力してください。");
+      if (loginId) {
+        if (loginId.length < 4 || loginId.length > 64) blockers.push("ログインIDは4文字以上64文字以下で入力してください。");
+        if (loginId.trim() !== loginId) blockers.push("ログインIDの先頭または末尾に空白は使用できません。");
+        if (/[\u0000-\u001F\u007F]/.test(loginId)) blockers.push("ログインIDに制御文字は使用できません。");
+      }
+      if (!administratorPassword) blockers.push("管理者自身の現在のパスワードを入力してください。");
+      if (!temporaryPassword) blockers.push("本人用仮パスワードを入力してください。");
+      if (!temporaryPasswordConfirm) blockers.push("本人用仮パスワード（確認）を入力してください。");
+      if (temporaryPassword) {
+        if (temporaryPassword.length < 8 || temporaryPassword.length > 64) blockers.push("仮パスワードは8文字以上64文字以下で入力してください。");
+        if (temporaryPassword.trim() !== temporaryPassword) blockers.push("仮パスワードの先頭または末尾に空白は使用できません。");
+        if (/[\u0000-\u001F\u007F]/.test(temporaryPassword)) blockers.push("仮パスワードに制御文字は使用できません。");
+      }
+      if (temporaryPassword && temporaryPasswordConfirm && temporaryPassword !== temporaryPasswordConfirm) {
+        blockers.push("仮パスワードと確認入力が一致しません。");
+      }
+      return Array.from(new Set(blockers));
+    }
+
+    async function handleCommonAccountIssueSubmit() {
+      const target = getCommonAccountIssueTarget();
+      const blockers = buildCommonAccountIssueClientBlockers();
+      if (blockers.length) {
+        clearCommonAccountIssueInputs({ keepLoginId: true });
+        state.commonAccountIssue = {
+          ...state.commonAccountIssue,
+          status: "error",
+          message: blockers[0],
+          lastError: blockers.join(" / "),
+        };
+        appendOperationLog("createEmployeeCommonAccount", "warning", "共通アカウント発行送信前にブロックしました。", {
+          employee_id: target?.employee_id || "",
+          blocker_count: blockers.length,
+          blockers: blockers.join(" / "),
+          password_values_logged: "FALSE",
+        });
+        renderCommonAccountIssueModal();
+        refreshIcons();
+        showToast(blockers[0]);
+        return;
+      }
+
+      const loginId = toText(commonAccountIssueLoginIdInput?.value);
+      const confirmText = `${target.display_name || target.employee_no}さんの共通アカウントを、ログインID「${loginId}」で発行します。\n\n発行後は本人による初回パスワード変更が必要です。よろしいですか？`;
+      if (!window.confirm(confirmText)) return;
+
+      const administratorPassword = toText(commonAccountIssueAdministratorPasswordInput?.value);
+      const temporaryPassword = toText(commonAccountIssueTemporaryPasswordInput?.value);
+      const temporaryPasswordConfirm = toText(commonAccountIssueTemporaryPasswordConfirmInput?.value);
+      state.commonAccountIssue = {
+        ...state.commonAccountIssue,
+        status: "submitting",
+        message: "共通アカウントを発行しています。",
+        lastError: "",
+      };
+      renderCommonAccountIssueModal();
+      refreshIcons();
+
+      try {
+        const result = await callEmployeeApi(APP_CONFIG.apiActions.createEmployeeCommonAccount, {
+          auth: buildCurrentAuthPayload(),
+          employee_id: target.employee_id,
+          login_id: loginId,
+          administrator_password: administratorPassword,
+          temporary_password: temporaryPassword,
+          temporary_password_confirm: temporaryPasswordConfirm,
+        });
+        const message = result.message || "共通アカウントを発行しました。";
+        appendOperationLog("createEmployeeCommonAccount", "ok", message, {
+          account_id: result?.data?.account_id || "",
+          employee_id: result?.data?.employee_id || target.employee_id,
+          employee_no: result?.data?.employee_no || target.employee_no,
+          login_id: result?.data?.login_id || loginId,
+          must_change_password: result?.data?.must_change_password ? "TRUE" : "確認対象",
+          app_roles_added: Number(result?.data?.app_roles_added || 0),
+          password_hash_returned: result?.data?.password_hash_returned === false ? "FALSE" : "未返却確認対象",
+          temporary_password_returned: result?.data?.temporary_password_returned === false ? "FALSE" : "未返却確認対象",
+          password_values_logged: "FALSE",
+        });
+        clearCommonAccountIssueInputs({ keepLoginId: false });
+        commonAccountIssueModalBackdrop?.classList.remove("is-open");
+        state.commonAccountIssue = { status: "success", employeeId: "", message, lastError: "" };
+        await loadAccountManagementData({ silent: true });
+        document.body.style.overflow = accountAdminModalBackdrop?.classList.contains("is-open") ? "hidden" : "";
+        showToast(`${message} ログインIDと設定した仮パスワードを本人へ伝えてください。`);
+      } catch (error) {
+        if (isDiscardedAuthContextError(error)) return;
+        const result = error.apiResult || {};
+        const blockers = result?.data?.safetyCheck?.blockers || result?.data?.authorization?.blockers || result?.data?.idempotency?.blockers || [];
+        const message = result.message || error.message || "共通アカウント発行に失敗しました。";
+        clearCommonAccountIssueInputs({ keepLoginId: true });
+        state.commonAccountIssue = {
+          ...state.commonAccountIssue,
+          status: "error",
+          message,
+          lastError: Array.isArray(blockers) ? blockers.join(" / ") : message,
+        };
+        appendOperationLog("createEmployeeCommonAccount", "error", message, {
+          employee_id: target?.employee_id || "",
+          login_id: loginId,
+          blockers: Array.isArray(blockers) ? blockers.join(" / ") : "",
+          password_values_logged: "FALSE",
+        });
+        showToast(message);
+      } finally {
+        renderCommonAccountIssueModal();
+        renderAccountManagementPanel();
+        refreshIcons();
+      }
     }
 
     function clearAccountManagementInputs() {
@@ -5755,6 +6139,10 @@
         showToast(`${row.display_name || row.employee_no}: ${status.label} / login_id ${row.login_id || "未発行"} / ${roles}`);
         return;
       }
+      if (action === "issue") {
+        openCommonAccountIssueModal(row);
+        return;
+      }
       const actionLabels = {
         issue: "共通アカウント発行",
         reset: "パスワード再初期化",
@@ -5816,6 +6204,9 @@
       }
 
       renderCommonAccountPanel();
+      if (commonAccountIssueModalBackdrop?.classList.contains("is-open")) {
+        renderCommonAccountIssueModal();
+      }
 
       const accounts = Array.isArray(management.accounts) ? management.accounts : [];
       const previous = toText(
@@ -6241,6 +6632,7 @@
         APP_CONFIG.apiActions.updateEmployee,
         APP_CONFIG.apiActions.disableEmployee,
         APP_CONFIG.apiActions.retireEmployee,
+        APP_CONFIG.apiActions.createEmployeeCommonAccount,
       ].includes(action);
     }
 
@@ -9083,6 +9475,36 @@
         });
       });
 
+      if (commonAccountIssueSubmitButton) {
+        commonAccountIssueSubmitButton.addEventListener("click", handleCommonAccountIssueSubmit);
+      }
+      if (commonAccountIssueClearButton) {
+        commonAccountIssueClearButton.addEventListener("click", () => {
+          const target = getCommonAccountIssueTarget();
+          if (commonAccountIssueLoginIdInput) commonAccountIssueLoginIdInput.value = toText(target?.employee_no).trim();
+          clearCommonAccountIssueInputs({ keepLoginId: true });
+          state.commonAccountIssue = {
+            ...state.commonAccountIssue,
+            status: "idle",
+            message: "発行入力をクリアしました。",
+            lastError: "",
+          };
+          renderCommonAccountIssueModal();
+          refreshIcons();
+        });
+      }
+      [closeCommonAccountIssueModalButton, cancelCommonAccountIssueModalButton].filter(Boolean).forEach((button) => {
+        button.addEventListener("click", closeCommonAccountIssueModal);
+      });
+      if (commonAccountIssueTemporaryPasswordConfirmInput) {
+        commonAccountIssueTemporaryPasswordConfirmInput.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            handleCommonAccountIssueSubmit();
+          }
+        });
+      }
+
       if (logoutButton) {
         logoutButton.addEventListener("click", handleLogout);
       }
@@ -9239,6 +9661,11 @@
 
       document.addEventListener("keydown", (event) => {
         if (event.key !== "Escape") return;
+
+        if (commonAccountIssueModalBackdrop?.classList.contains("is-open")) {
+          closeCommonAccountIssueModal();
+          return;
+        }
 
         if (accountAdminModalBackdrop?.classList.contains("is-open")) {
           closeAccountAdminModal();
