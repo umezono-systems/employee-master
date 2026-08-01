@@ -1,5 +1,8 @@
 <!DOCTYPE html>
 <!--
+  v1.8-6a: 共通アカウント管理の部署・勤務地絞り込みを各_sys_マスタのsort_order順へ修正。
+             同順位は名称順、マスタ未登録codeは一覧から失わないよう末尾へ名称順で表示する。
+             HTML側のみ修正。GAS処理変更なし、DB変更なし、GASデプロイURL変更なし。
   v1.8-6: 共通アカウント管理一覧画面を追加。未発行・利用中・初回設定待ち・停止中・要対応の状態表示、
             社員番号・氏名・login_id・account_id検索、状態・部署・勤務地絞り込み、PC表・スマホカード、
             操作入口を実装。社員本人用とシステム管理者アカウントをタブ分離する。
@@ -68,7 +71,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>社員マスタ v1.8-6_work</title>
+  <title>社員マスタ v1.8-6a_work</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
@@ -3565,8 +3568,8 @@
     const GAS_DEPLOY_URL = "https://script.google.com/macros/s/AKfycbxOY4thFjX4f43TxXNaCGlh5_HXpgP70xZGyyq9sCemUgNSWCmnMt_8-q2EB1tgLsUMHg/exec"; // GAS WebアプリのデプロイURL。
 
     const APP_CONFIG = {
-      version: "v1.8-6_work",
-      modeLabel: "v1.8-1 work 作業版",
+      version: "v1.8-6a_work",
+      modeLabel: "v1.8-6a work 作業版",
       gasEndpoint: GAS_DEPLOY_URL.trim(),
       useSampleFallback: false,
       apiTimeoutMs: 15000,
@@ -5491,29 +5494,64 @@
       });
     }
 
+    function buildCommonAccountMasterFilterItems(rows, codeKey, nameKey, masterList) {
+      const usedByCode = new Map();
+      rows.forEach((row) => {
+        const code = toText(row?.[codeKey]).trim();
+        if (!code || usedByCode.has(code)) return;
+        usedByCode.set(code, {
+          code,
+          name: toText(row?.[nameKey]).trim() || code,
+        });
+      });
+
+      const getSortOrder = (item) => {
+        const raw = toText(item?.sort_order).trim();
+        if (!raw) return Number.MAX_SAFE_INTEGER;
+        const parsed = Number(raw);
+        return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
+      };
+
+      const masterItems = normalizeMasterList(masterList)
+        .filter((item) => item.code && toText(item.status || "active") !== "inactive")
+        .filter((item) => usedByCode.has(item.code))
+        .sort((a, b) => {
+          const orderDiff = getSortOrder(a) - getSortOrder(b);
+          if (orderDiff !== 0) return orderDiff;
+          return toText(a.name || a.code).localeCompare(toText(b.name || b.code), "ja");
+        })
+        .map((item) => ({
+          code: item.code,
+          name: item.name || usedByCode.get(item.code)?.name || item.code,
+        }));
+
+      const masterCodes = new Set(masterItems.map((item) => item.code));
+      const unmatchedItems = Array.from(usedByCode.values())
+        .filter((item) => !masterCodes.has(item.code))
+        .sort((a, b) => toText(a.name || a.code).localeCompare(toText(b.name || b.code), "ja"));
+
+      return [...masterItems, ...unmatchedItems];
+    }
+
     function renderCommonAccountFilterOptions(rows) {
-      const buildOptions = (items, selected, emptyLabel) => {
+      const buildOptions = (items, emptyLabel) => {
         const options = items
           .filter((item) => item.code)
-          .sort((a, b) => toText(a.name || a.code).localeCompare(toText(b.name || b.code), "ja"))
           .map((item) => `<option value="${escapeHtml(item.code)}">${escapeHtml(item.name || item.code)}</option>`)
           .join("");
         return `<option value="all">${escapeHtml(emptyLabel)}</option>${options}`;
-      };
-      const uniqueByCode = (source, codeKey, nameKey) => {
-        const map = new Map();
-        source.forEach((row) => {
-          const code = toText(row[codeKey]).trim();
-          if (!code || map.has(code)) return;
-          map.set(code, { code, name: toText(row[nameKey]).trim() || code });
-        });
-        return Array.from(map.values());
       };
 
       if (commonAccountDepartmentFilter) {
         const current = state.accountManagement.departmentFilter || "all";
         commonAccountDepartmentFilter.innerHTML = buildOptions(
-          uniqueByCode(rows, "department_code", "department_name"), current, "すべて"
+          buildCommonAccountMasterFilterItems(
+            rows,
+            "department_code",
+            "department_name",
+            state.masters.departments
+          ),
+          "すべて"
         );
         commonAccountDepartmentFilter.value = Array.from(commonAccountDepartmentFilter.options)
           .some((option) => option.value === current) ? current : "all";
@@ -5522,7 +5560,13 @@
       if (commonAccountWorkplaceFilter) {
         const current = state.accountManagement.workplaceFilter || "all";
         commonAccountWorkplaceFilter.innerHTML = buildOptions(
-          uniqueByCode(rows, "workplace_code", "workplace_name"), current, "すべて"
+          buildCommonAccountMasterFilterItems(
+            rows,
+            "workplace_code",
+            "workplace_name",
+            state.masters.workplaces
+          ),
+          "すべて"
         );
         commonAccountWorkplaceFilter.value = Array.from(commonAccountWorkplaceFilter.options)
           .some((option) => option.value === current) ? current : "all";
