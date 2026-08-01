@@ -1,5 +1,11 @@
 <!DOCTYPE html>
 <!--
+  v1.8-8b: 共通アカウント発行時のaccount_idが、_sys_account_roleに残る孤立role行と衝突し、
+             社員本人用アカウントが社員マスタ管理者扱いになる問題へ対応。
+             role競合アカウントは一般社員一覧から消さず「要対応」で表示し、今後の採番はrole行のIDも予約済みとして扱う。
+             HTML・GAS修正、DB列変更なし、GASデプロイURL変更なし。
+-->
+<!--
   v1.8-8a: 共通アカウント発行後も「未発行」絞り込みが残り、対象社員が一覧から消えたように見える問題を修正。
              発行成功後は状態を「初回設定待ち」、検索を対象社員番号へ自動変更し、部署・勤務地絞り込みを解除して発行結果を表示する。
              HTML側のみ修正。GAS処理変更なし、DB変更なし、GASデプロイURL変更なし。
@@ -85,7 +91,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>社員マスタ v1.8-8a_work</title>
+  <title>社員マスタ v1.8-8b_work</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
@@ -3740,7 +3746,7 @@
     const GAS_DEPLOY_URL = "https://script.google.com/macros/s/AKfycbxOY4thFjX4f43TxXNaCGlh5_HXpgP70xZGyyq9sCemUgNSWCmnMt_8-q2EB1tgLsUMHg/exec"; // GAS WebアプリのデプロイURL。
 
     const APP_CONFIG = {
-      version: "v1.8-8a_work",
+      version: "v1.8-8b_work",
       modeLabel: "v1.8-8 work 作業版",
       gasEndpoint: GAS_DEPLOY_URL.trim(),
       useSampleFallback: false,
