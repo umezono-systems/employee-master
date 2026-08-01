@@ -1,5 +1,8 @@
 <!DOCTYPE html>
 <!--
+  v1.8-6b: ログイン認証中・社員データ読込中・管理情報読込中などの loader-2 アイコンへ回転アニメーションを追加。
+             読込状態のステータス表示にも回転アイコンを使用し、処理中をフリーズと誤認しにくくする。
+             HTML側のみ修正。GAS処理変更なし、DB変更なし、GASデプロイURL変更なし。
   v1.8-6a: 共通アカウント管理の部署・勤務地絞り込みを各_sys_マスタのsort_order順へ修正。
              同順位は名称順、マスタ未登録codeは一覧から失わないよう末尾へ名称順で表示する。
              HTML側のみ修正。GAS処理変更なし、DB変更なし、GASデプロイURL変更なし。
@@ -71,7 +74,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>社員マスタ v1.8-6a_work</title>
+  <title>社員マスタ v1.8-6b_work</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
@@ -120,6 +123,25 @@
 
     button {
       cursor: pointer;
+    }
+
+    /* v1.8-6b: 通信・認証処理中の loader アイコンを回転させ、待機中であることを明示する。 */
+    @keyframes ume-loader-spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .lucide-loader-2 {
+      animation: ume-loader-spin 0.85s linear infinite;
+      transform-origin: center;
+      transform-box: fill-box;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .lucide-loader-2 {
+        animation-duration: 1.8s;
+      }
     }
 
     .app-shell {
@@ -3568,8 +3590,8 @@
     const GAS_DEPLOY_URL = "https://script.google.com/macros/s/AKfycbxOY4thFjX4f43TxXNaCGlh5_HXpgP70xZGyyq9sCemUgNSWCmnMt_8-q2EB1tgLsUMHg/exec"; // GAS WebアプリのデプロイURL。
 
     const APP_CONFIG = {
-      version: "v1.8-6a_work",
-      modeLabel: "v1.8-6a work 作業版",
+      version: "v1.8-6b_work",
+      modeLabel: "v1.8-6b work 作業版",
       gasEndpoint: GAS_DEPLOY_URL.trim(),
       useSampleFallback: false,
       apiTimeoutMs: 15000,
@@ -4528,17 +4550,22 @@
             : state.dataSource === "error"
               ? "社員データ未取得"
               : "ログイン後に読込";
-        const sourceIcon = state.dataSource === "gas"
-          ? "database-zap"
-          : state.dataSource === "error"
-            ? "database-x"
-            : "lock-keyhole";
-        const sourceClass = state.dataSource === "gas"
-          ? "sample"
-          : state.dataSource === "error"
-            ? "warning"
-            : "offline";
+        const sourceIcon = state.isLoading
+          ? "loader-2"
+          : state.dataSource === "gas"
+            ? "database-zap"
+            : state.dataSource === "error"
+              ? "database-x"
+              : "lock-keyhole";
+        const sourceClass = state.isLoading
+          ? "warning"
+          : state.dataSource === "gas"
+            ? "sample"
+            : state.dataSource === "error"
+              ? "warning"
+              : "offline";
         dataSourceChip.className = `status-chip ${sourceClass}`;
+        dataSourceChip.setAttribute("aria-busy", state.isLoading ? "true" : "false");
         dataSourceChip.innerHTML = `<i data-lucide="${sourceIcon}"></i>${sourceLabel}`;
       }
 
@@ -5147,6 +5174,7 @@
       if (loginFoundationPanel) {
         loginFoundationPanel.hidden = authenticated;
         loginFoundationPanel.setAttribute("aria-hidden", authenticated ? "true" : "false");
+        loginFoundationPanel.setAttribute("aria-busy", checking ? "true" : "false");
       }
       if (loginPanelStatusChip) {
         loginPanelStatusChip.className = `status-chip ${view.className}`;
@@ -5161,6 +5189,7 @@
       }
       if (loginButton) {
         loginButton.disabled = checking || authenticated || !APP_CONFIG.gasConnected;
+        loginButton.setAttribute("aria-busy", checking ? "true" : "false");
         loginButton.innerHTML = checking
           ? '<i data-lucide="loader-2"></i>確認中'
           : '<i data-lucide="log-in"></i>ログイン';
