@@ -1,5 +1,9 @@
 <!DOCTYPE html>
 <!--
+  v1.8-6: 共通アカウント管理一覧画面を追加。未発行・利用中・初回設定待ち・停止中・要対応の状態表示、
+            社員番号・氏名・login_id・account_id検索、状態・部署・勤務地絞り込み、PC表・スマホカード、
+            操作入口を実装。社員本人用とシステム管理者アカウントをタブ分離する。
+            発行・停止・再開の書込みAPI接続は次工程。GAS処理変更なし、DB変更なし、GASデプロイURL変更なし。
   v1.8-5: 共通アカウント管理データ取得APIの拡張返却に対応。
             未発行社員・社員本人用・管理者・紐付け不明・summary・integrityCheckを画面状態へ保持する。
             既存の管理者パスワード再初期化画面はaccounts互換返却で継続利用する。
@@ -64,7 +68,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>社員マスタ v1.8-5_work</title>
+  <title>社員マスタ v1.8-6_work</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
@@ -934,8 +938,278 @@
       line-height: 1.7;
     }
 
+    .account-management-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 4px;
+      border: 1px solid var(--ume-line);
+      border-radius: 14px;
+      background: var(--ume-cream);
+    }
+
+    .account-management-tab {
+      display: inline-flex;
+      flex: 1 1 220px;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      min-height: 42px;
+      padding: 0 14px;
+      border: 1px solid transparent;
+      border-radius: 11px;
+      background: transparent;
+      color: var(--ume-muted);
+      font-weight: 800;
+    }
+
+    .account-management-tab.is-active {
+      border-color: var(--ume-line);
+      background: #fff;
+      color: var(--ume-brown);
+      box-shadow: 0 5px 14px rgba(49, 93, 153, 0.1);
+    }
+
+    .account-management-tab[disabled] {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .common-account-panel {
+      display: grid;
+      gap: 14px;
+      padding: 16px;
+      border: 1px solid #c9d7e6;
+      border-radius: 16px;
+      background: #fbfdff;
+    }
+
+    .common-account-panel[hidden] {
+      display: none !important;
+    }
+
+    .common-account-summary {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(105px, 1fr));
+      gap: 8px;
+    }
+
+    .common-account-summary-button {
+      display: grid;
+      gap: 2px;
+      min-height: 64px;
+      padding: 9px 10px;
+      border: 1px solid var(--ume-line);
+      border-radius: 12px;
+      background: #fff;
+      color: var(--ume-muted);
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .common-account-summary-button:hover,
+    .common-account-summary-button.is-selected {
+      border-color: var(--ume-blue);
+      box-shadow: 0 0 0 3px rgba(49, 93, 153, 0.1);
+    }
+
+    .common-account-summary-button strong {
+      color: var(--ume-text);
+      font-size: 1.08rem;
+    }
+
+    .common-account-summary-button span {
+      font-size: 0.76rem;
+      font-weight: 800;
+    }
+
+    .common-account-filter-grid {
+      display: grid;
+      grid-template-columns: minmax(240px, 1.4fr) repeat(3, minmax(150px, 0.8fr)) auto;
+      gap: 9px;
+      align-items: end;
+    }
+
+    .common-account-integrity {
+      display: none;
+      padding: 11px 12px;
+      border: 1px solid #efd28d;
+      border-radius: 12px;
+      background: #fff8e7;
+      color: #745300;
+      font-size: 0.84rem;
+      line-height: 1.65;
+    }
+
+    .common-account-integrity.is-visible {
+      display: block;
+    }
+
+    .common-account-result-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .common-account-result-title {
+      margin: 0;
+      color: var(--ume-brown);
+      font-size: 0.98rem;
+      font-weight: 800;
+    }
+
+    .common-account-result-count {
+      color: var(--ume-muted);
+      font-size: 0.82rem;
+      font-weight: 800;
+    }
+
+    .common-account-table-wrap {
+      max-height: min(48vh, 520px);
+      overflow: auto;
+      border: 1px solid var(--ume-line);
+      border-radius: 14px;
+      background: #fff;
+    }
+
+    .common-account-table {
+      min-width: 1080px;
+      table-layout: fixed;
+    }
+
+    .common-account-table th,
+    .common-account-table td {
+      padding: 10px 9px;
+      font-size: 0.82rem;
+    }
+
+    .common-account-table th {
+      top: 0;
+      z-index: 2;
+    }
+
+    .common-account-table .account-person-column { width: 185px; }
+    .common-account-table .account-belonging-column { width: 180px; }
+    .common-account-table .account-login-column { width: 145px; }
+    .common-account-table .account-status-column { width: 130px; }
+    .common-account-table .account-app-column { width: 190px; }
+    .common-account-table .account-updated-column { width: 145px; }
+    .common-account-table .account-actions-column { width: 205px; }
+
+    .common-account-person-name {
+      display: block;
+      color: var(--ume-text);
+      font-weight: 800;
+    }
+
+    .common-account-person-sub,
+    .common-account-cell-sub {
+      display: block;
+      margin-top: 2px;
+      color: var(--ume-muted);
+      font-size: 0.73rem;
+      line-height: 1.45;
+    }
+
+    .common-account-role-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .common-account-role-chip {
+      display: inline-flex;
+      max-width: 100%;
+      padding: 3px 7px;
+      border: 1px solid #c9d7e6;
+      border-radius: 999px;
+      background: #f6f9fd;
+      color: var(--ume-brown);
+      font-size: 0.68rem;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+
+    .common-account-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+
+    .common-account-actions .button {
+      min-height: 31px;
+      padding: 0 8px;
+      border-radius: 9px;
+      font-size: 0.72rem;
+    }
+
+    .common-account-mobile-list {
+      display: none;
+      gap: 10px;
+    }
+
+    .common-account-card {
+      display: grid;
+      gap: 10px;
+      padding: 13px;
+      border: 1px solid var(--ume-line);
+      border-radius: 14px;
+      background: #fff;
+    }
+
+    .common-account-card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .common-account-card-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .common-account-card-item {
+      padding: 8px 9px;
+      border-radius: 10px;
+      background: var(--ume-cream);
+    }
+
+    .common-account-card-item span {
+      display: block;
+      color: var(--ume-muted);
+      font-size: 0.68rem;
+      font-weight: 800;
+    }
+
+    .common-account-card-item strong {
+      display: block;
+      margin-top: 2px;
+      color: var(--ume-text);
+      font-size: 0.8rem;
+      overflow-wrap: anywhere;
+    }
+
+    .common-account-empty {
+      display: none;
+      padding: 24px 16px;
+      border: 1px dashed var(--ume-line);
+      border-radius: 14px;
+      background: #fff;
+      color: var(--ume-muted);
+      text-align: center;
+      line-height: 1.7;
+    }
+
+    .common-account-empty.is-visible {
+      display: block;
+    }
+
     .account-admin-modal {
-      width: min(840px, 100%);
+      width: min(1180px, 100%);
     }
 
     .account-admin-modal .account-admin-panel {
@@ -1929,6 +2203,31 @@
         flex: 1 1 180px;
       }
 
+
+      .common-account-summary {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .common-account-filter-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .common-account-filter-grid .field:first-child {
+        grid-column: 1 / -1;
+      }
+
+      .common-account-filter-grid .button {
+        width: 100%;
+      }
+
+      .common-account-table-wrap {
+        display: none;
+      }
+
+      .common-account-mobile-list {
+        display: grid;
+      }
+
       .summary-row {
         align-items: flex-start;
       }
@@ -1948,6 +2247,23 @@
 
       .summary-actions .button {
         flex: 1 1 140px;
+      }
+
+
+      .common-account-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .common-account-filter-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .common-account-filter-grid .field:first-child {
+        grid-column: auto;
+      }
+
+      .common-account-card-grid {
+        grid-template-columns: 1fr;
       }
 
       .desktop-table {
@@ -2918,13 +3234,109 @@
         </button>
       </header>
       <div class="modal-body">
+        <nav id="accountManagementTabs" class="account-management-tabs" aria-label="アカウント管理区分">
+          <button id="commonAccountsTabButton" class="account-management-tab is-active" type="button"
+            aria-selected="true">
+            <i data-lucide="users-round"></i>共通アカウント
+          </button>
+          <button id="administratorAccountsTabButton" class="account-management-tab" type="button"
+            aria-selected="false">
+            <i data-lucide="shield-check"></i>システム管理者アカウント
+          </button>
+        </nav>
+
+        <section id="commonAccountPanel" class="common-account-panel" aria-label="共通アカウント管理">
+          <div class="account-admin-head">
+            <div>
+              <h3 class="account-admin-title">共通アカウント管理</h3>
+              <p class="account-admin-note">
+                社員本人用共通アカウントの発行状況と利用状態を確認します。アプリ権限は参照表示のみです。
+              </p>
+            </div>
+            <span id="commonAccountStatusChip" class="status-chip offline"><i data-lucide="users"></i>読込前</span>
+          </div>
+
+          <div id="commonAccountSummary" class="common-account-summary" aria-label="共通アカウント状態件数"></div>
+
+          <div id="commonAccountIntegrity" class="common-account-integrity" role="status"></div>
+
+          <div class="common-account-filter-grid">
+            <div class="field">
+              <label for="commonAccountKeywordInput">社員・アカウント検索</label>
+              <input id="commonAccountKeywordInput" class="input" type="search"
+                placeholder="社員番号・氏名・ログインID・account_id" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="commonAccountStatusFilter">状態</label>
+              <select id="commonAccountStatusFilter" class="select">
+                <option value="all">すべて</option>
+                <option value="unissued">未発行</option>
+                <option value="active">利用中</option>
+                <option value="first_login_pending">初回設定待ち</option>
+                <option value="suspended">停止中</option>
+                <option value="attention">要対応</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="commonAccountDepartmentFilter">部署</label>
+              <select id="commonAccountDepartmentFilter" class="select">
+                <option value="all">すべて</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="commonAccountWorkplaceFilter">勤務地</label>
+              <select id="commonAccountWorkplaceFilter" class="select">
+                <option value="all">すべて</option>
+              </select>
+            </div>
+            <button id="commonAccountClearFilterButton" class="button" type="button">
+              <i data-lucide="filter-x"></i>条件クリア
+            </button>
+          </div>
+
+          <div class="common-account-result-head">
+            <div>
+              <h4 class="common-account-result-title">社員本人用共通アカウント</h4>
+              <span id="commonAccountResultCount" class="common-account-result-count">0件</span>
+            </div>
+            <button id="commonAccountReloadButton" class="button" type="button">
+              <i data-lucide="refresh-cw"></i>最新情報を再読込
+            </button>
+          </div>
+
+          <div class="common-account-table-wrap">
+            <table class="common-account-table" aria-label="共通アカウント一覧">
+              <thead>
+                <tr>
+                  <th class="account-person-column">社員</th>
+                  <th class="account-belonging-column">所属</th>
+                  <th class="account-login-column">アカウント</th>
+                  <th class="account-status-column">状態</th>
+                  <th class="account-app-column">利用アプリ</th>
+                  <th class="account-updated-column">更新日時</th>
+                  <th class="account-actions-column">操作</th>
+                </tr>
+              </thead>
+              <tbody id="commonAccountTableBody"></tbody>
+            </table>
+          </div>
+
+          <div id="commonAccountMobileList" class="common-account-mobile-list" aria-label="共通アカウント一覧"></div>
+          <div id="commonAccountEmpty" class="common-account-empty">
+            条件に一致する社員本人用共通アカウントがありません。
+          </div>
+          <p id="commonAccountMessage" class="account-admin-message">
+            管理メニューを開くと最新の共通アカウント情報を取得します。
+          </p>
+        </section>
+
       <section id="accountAdminPanel" class="account-admin-panel"
-        aria-label="管理者パスワード再初期化" aria-hidden="false">
+        aria-label="システム管理者アカウント" aria-hidden="true" hidden>
         <div class="account-admin-head">
           <div>
-            <h3 class="account-admin-title">パスワード再初期化</h3>
+            <h3 class="account-admin-title">システム管理者アカウント</h3>
             <p class="account-admin-note">
-              対象の管理者アカウントへ仮パスワードを設定し、次回ログイン時のパスワード変更を必須にします。
+              独立したシステム管理者と社員マスタ管理者のパスワードを再初期化します。
             </p>
           </div>
           <span id="accountAdminStatusChip" class="status-chip offline"><i data-lucide="shield-alert"></i>system_admin専用</span>
@@ -3153,7 +3565,7 @@
     const GAS_DEPLOY_URL = "https://script.google.com/macros/s/AKfycbxOY4thFjX4f43TxXNaCGlh5_HXpgP70xZGyyq9sCemUgNSWCmnMt_8-q2EB1tgLsUMHg/exec"; // GAS WebアプリのデプロイURL。
 
     const APP_CONFIG = {
-      version: "v1.8-5_work",
+      version: "v1.8-6_work",
       modeLabel: "v1.8-1 work 作業版",
       gasEndpoint: GAS_DEPLOY_URL.trim(),
       useSampleFallback: false,
@@ -3479,6 +3891,11 @@
         summary: {},
         integrityCheck: {},
         selectedAccountId: "",
+        activeView: "common",
+        keyword: "",
+        statusFilter: "all",
+        departmentFilter: "all",
+        workplaceFilter: "all",
         message: "",
         lastError: "",
       },
@@ -3538,6 +3955,24 @@
     const accountAdminModalBackdrop = document.getElementById("accountAdminModalBackdrop");
     const closeAccountAdminModalButton = document.getElementById("closeAccountAdminModalButton");
     const cancelAccountAdminModalButton = document.getElementById("cancelAccountAdminModalButton");
+    const accountManagementTabs = document.getElementById("accountManagementTabs");
+    const commonAccountsTabButton = document.getElementById("commonAccountsTabButton");
+    const administratorAccountsTabButton = document.getElementById("administratorAccountsTabButton");
+    const commonAccountPanel = document.getElementById("commonAccountPanel");
+    const commonAccountStatusChip = document.getElementById("commonAccountStatusChip");
+    const commonAccountSummary = document.getElementById("commonAccountSummary");
+    const commonAccountIntegrity = document.getElementById("commonAccountIntegrity");
+    const commonAccountKeywordInput = document.getElementById("commonAccountKeywordInput");
+    const commonAccountStatusFilter = document.getElementById("commonAccountStatusFilter");
+    const commonAccountDepartmentFilter = document.getElementById("commonAccountDepartmentFilter");
+    const commonAccountWorkplaceFilter = document.getElementById("commonAccountWorkplaceFilter");
+    const commonAccountClearFilterButton = document.getElementById("commonAccountClearFilterButton");
+    const commonAccountReloadButton = document.getElementById("commonAccountReloadButton");
+    const commonAccountResultCount = document.getElementById("commonAccountResultCount");
+    const commonAccountTableBody = document.getElementById("commonAccountTableBody");
+    const commonAccountMobileList = document.getElementById("commonAccountMobileList");
+    const commonAccountEmpty = document.getElementById("commonAccountEmpty");
+    const commonAccountMessage = document.getElementById("commonAccountMessage");
     const accountAdminPanel = document.getElementById("accountAdminPanel");
     const accountAdminStatusChip = document.getElementById("accountAdminStatusChip");
     const accountAdminTargetSelect = document.getElementById("accountAdminTargetSelect");
@@ -4953,10 +5388,11 @@
       if (!accountAdminModalBackdrop) return;
       accountAdminModalBackdrop.classList.add("is-open");
       document.body.style.overflow = "hidden";
+      state.accountManagement.activeView = "common";
       renderAccountManagementPanel();
       refreshIcons();
       loadAccountManagementData({ silent: true }).finally(() => {
-        window.setTimeout(() => accountAdminTargetSelect?.focus(), 0);
+        window.setTimeout(() => commonAccountKeywordInput?.focus(), 0);
       });
     }
 
@@ -4978,6 +5414,11 @@
         summary: {},
         integrityCheck: {},
         selectedAccountId: "",
+        activeView: "common",
+        keyword: "",
+        statusFilter: "all",
+        departmentFilter: "all",
+        workplaceFilter: "all",
         message,
         lastError: "",
       };
@@ -4987,6 +5428,267 @@
       if (accountAdminCurrentPasswordInput) accountAdminCurrentPasswordInput.value = "";
       if (accountAdminTemporaryPasswordInput) accountAdminTemporaryPasswordInput.value = "";
       if (accountAdminTemporaryPasswordConfirmInput) accountAdminTemporaryPasswordConfirmInput.value = "";
+    }
+
+    function getCommonAccountStatusMeta(status) {
+      const map = {
+        unissued: { label: "未発行", badgeClass: "notice", icon: "user-plus" },
+        active: { label: "利用中", badgeClass: "active", icon: "circle-check" },
+        first_login_pending: { label: "初回設定待ち", badgeClass: "notice", icon: "key-round" },
+        suspended: { label: "停止中", badgeClass: "inactive", icon: "circle-pause" },
+        attention: { label: "要対応", badgeClass: "left", icon: "triangle-alert" },
+        not_eligible: { label: "対象外", badgeClass: "inactive", icon: "circle-slash" },
+      };
+      return map[status] || { label: status || "未判定", badgeClass: "inactive", icon: "circle-help" };
+    }
+
+    function getCommonAccountEmployeeStateLabel(row) {
+      if (row?.employment_state === "inactive") return "社員データ無効";
+      if (row?.employment_state === "left") return "退職";
+      return "在籍中";
+    }
+
+    function getCommonEmployeeRows() {
+      return (state.accountManagement?.employeeAccountRows || []).filter(
+        (row) => row?.account_kind !== "employee_admin"
+      );
+    }
+
+    function buildCommonAccountLocalSummary(rows = getCommonEmployeeRows()) {
+      const statuses = ["unissued", "active", "first_login_pending", "suspended", "attention"];
+      const summary = { all: rows.length };
+      statuses.forEach((status) => {
+        summary[status] = rows.filter((row) => row.management_status === status).length;
+      });
+      return summary;
+    }
+
+    function getFilteredCommonAccountRows() {
+      const management = state.accountManagement || {};
+      const keyword = toText(management.keyword).trim().toLowerCase();
+      const statusFilterValue = management.statusFilter || "all";
+      const departmentFilterValue = management.departmentFilter || "all";
+      const workplaceFilterValue = management.workplaceFilter || "all";
+
+      return getCommonEmployeeRows().filter((row) => {
+        if (statusFilterValue !== "all" && row.management_status !== statusFilterValue) return false;
+        if (departmentFilterValue !== "all" && toText(row.department_code) !== departmentFilterValue) return false;
+        if (workplaceFilterValue !== "all" && toText(row.workplace_code) !== workplaceFilterValue) return false;
+        if (!keyword) return true;
+        const haystack = [
+          row.employee_no,
+          row.employee_id,
+          row.display_name,
+          row.display_name_kana,
+          row.login_id,
+          row.account_id,
+          row.account_name,
+          row.department_name,
+          row.workplace_name,
+          row.section_name,
+        ].map((value) => toText(value).toLowerCase()).join(" ");
+        return haystack.includes(keyword);
+      });
+    }
+
+    function renderCommonAccountFilterOptions(rows) {
+      const buildOptions = (items, selected, emptyLabel) => {
+        const options = items
+          .filter((item) => item.code)
+          .sort((a, b) => toText(a.name || a.code).localeCompare(toText(b.name || b.code), "ja"))
+          .map((item) => `<option value="${escapeHtml(item.code)}">${escapeHtml(item.name || item.code)}</option>`)
+          .join("");
+        return `<option value="all">${escapeHtml(emptyLabel)}</option>${options}`;
+      };
+      const uniqueByCode = (source, codeKey, nameKey) => {
+        const map = new Map();
+        source.forEach((row) => {
+          const code = toText(row[codeKey]).trim();
+          if (!code || map.has(code)) return;
+          map.set(code, { code, name: toText(row[nameKey]).trim() || code });
+        });
+        return Array.from(map.values());
+      };
+
+      if (commonAccountDepartmentFilter) {
+        const current = state.accountManagement.departmentFilter || "all";
+        commonAccountDepartmentFilter.innerHTML = buildOptions(
+          uniqueByCode(rows, "department_code", "department_name"), current, "すべて"
+        );
+        commonAccountDepartmentFilter.value = Array.from(commonAccountDepartmentFilter.options)
+          .some((option) => option.value === current) ? current : "all";
+        state.accountManagement.departmentFilter = commonAccountDepartmentFilter.value;
+      }
+      if (commonAccountWorkplaceFilter) {
+        const current = state.accountManagement.workplaceFilter || "all";
+        commonAccountWorkplaceFilter.innerHTML = buildOptions(
+          uniqueByCode(rows, "workplace_code", "workplace_name"), current, "すべて"
+        );
+        commonAccountWorkplaceFilter.value = Array.from(commonAccountWorkplaceFilter.options)
+          .some((option) => option.value === current) ? current : "all";
+        state.accountManagement.workplaceFilter = commonAccountWorkplaceFilter.value;
+      }
+    }
+
+    function renderCommonAccountRoles(appRoles) {
+      const roles = Array.isArray(appRoles) ? appRoles : [];
+      if (!roles.length) return '<span class="common-account-cell-sub">権限なし</span>';
+      return `<div class="common-account-role-list">${roles.map((item) =>
+        `<span class="common-account-role-chip">${escapeHtml(item.app_code || "—")} / ${escapeHtml(item.role || "—")}</span>`
+      ).join("")}</div>`;
+    }
+
+    function renderCommonAccountActionButtons(row) {
+      const actions = row.actions || {};
+      const buttons = [
+        { key: "detail", label: "詳細", icon: "eye", show: true, className: "" },
+        { key: "issue", label: "発行", icon: "user-plus", show: actions.can_issue, className: "primary" },
+        { key: "reset", label: "再初期化", icon: "key-round", show: actions.can_reset_password, className: "" },
+        { key: "suspend", label: "停止", icon: "circle-pause", show: actions.can_suspend, className: "danger" },
+        { key: "reactivate", label: "再開", icon: "circle-play", show: actions.can_reactivate, className: "primary" },
+      ].filter((item) => item.show);
+      if (!buttons.length) return '<span class="common-account-cell-sub">操作なし</span>';
+      return `<div class="common-account-actions">${buttons.map((item) =>
+        `<button class="button ${item.className}" type="button" data-common-account-action="${item.key}" data-employee-id="${escapeHtml(row.employee_id || "")}"><i data-lucide="${item.icon}"></i>${item.label}</button>`
+      ).join("")}</div>`;
+    }
+
+    function renderCommonAccountTableRow(row) {
+      const status = getCommonAccountStatusMeta(row.management_status);
+      const accountLabel = row.account_exists
+        ? `${escapeHtml(row.login_id || "—")}<span class="common-account-cell-sub">${escapeHtml(row.account_id || "—")}</span>`
+        : '<span class="common-account-cell-sub">アカウント未発行</span>';
+      const belonging = [row.department_name, row.workplace_name, row.section_name].filter(Boolean);
+      return `<tr>
+        <td><span class="common-account-person-name">${escapeHtml(row.display_name || "名称未登録")}</span><span class="common-account-person-sub">社員番号 ${escapeHtml(row.employee_no || "—")} / ${escapeHtml(row.employee_id || "—")}</span></td>
+        <td>${escapeHtml(belonging[0] || "—")}<span class="common-account-cell-sub">${escapeHtml(belonging.slice(1).join(" / ") || "—")}</span></td>
+        <td>${accountLabel}</td>
+        <td><span class="badge ${status.badgeClass}">${escapeHtml(status.label)}</span><span class="common-account-cell-sub">${escapeHtml(getCommonAccountEmployeeStateLabel(row))}${row.must_change_password ? " / PW変更要" : ""}</span></td>
+        <td>${renderCommonAccountRoles(row.app_roles)}</td>
+        <td>${escapeHtml(row.account_updated_at || row.employee_updated_at || "—")}</td>
+        <td>${renderCommonAccountActionButtons(row)}</td>
+      </tr>`;
+    }
+
+    function renderCommonAccountCard(row) {
+      const status = getCommonAccountStatusMeta(row.management_status);
+      const belonging = [row.department_name, row.workplace_name, row.section_name].filter(Boolean).join(" / ") || "—";
+      return `<article class="common-account-card">
+        <div class="common-account-card-head">
+          <div><span class="common-account-person-name">${escapeHtml(row.display_name || "名称未登録")}</span><span class="common-account-person-sub">社員番号 ${escapeHtml(row.employee_no || "—")} / ${escapeHtml(row.employee_id || "—")}</span></div>
+          <span class="badge ${status.badgeClass}">${escapeHtml(status.label)}</span>
+        </div>
+        <div class="common-account-card-grid">
+          <div class="common-account-card-item"><span>所属</span><strong>${escapeHtml(belonging)}</strong></div>
+          <div class="common-account-card-item"><span>ログインID</span><strong>${escapeHtml(row.login_id || "未発行")}</strong></div>
+          <div class="common-account-card-item"><span>account_id</span><strong>${escapeHtml(row.account_id || "—")}</strong></div>
+          <div class="common-account-card-item"><span>社員状態</span><strong>${escapeHtml(getCommonAccountEmployeeStateLabel(row))}</strong></div>
+        </div>
+        <div>${renderCommonAccountRoles(row.app_roles)}</div>
+        ${renderCommonAccountActionButtons(row)}
+      </article>`;
+    }
+
+    function renderCommonAccountSummary(rows) {
+      if (!commonAccountSummary) return;
+      const summary = buildCommonAccountLocalSummary(rows);
+      const definitions = [
+        ["all", "全社員"],
+        ["unissued", "未発行"],
+        ["active", "利用中"],
+        ["first_login_pending", "初回設定待ち"],
+        ["suspended", "停止中"],
+        ["attention", "要対応"],
+      ];
+      commonAccountSummary.innerHTML = definitions.map(([key, label]) => {
+        const selected = (state.accountManagement.statusFilter || "all") === key;
+        return `<button class="common-account-summary-button ${selected ? "is-selected" : ""}" type="button" data-common-account-status-filter="${key}"><strong>${summary[key] || 0}</strong><span>${label}</span></button>`;
+      }).join("");
+    }
+
+    function renderCommonAccountIntegrity() {
+      if (!commonAccountIntegrity) return;
+      const integrity = state.accountManagement?.integrityCheck || {};
+      const warnings = Array.isArray(integrity.warnings) ? integrity.warnings : [];
+      const orphanCount = (state.accountManagement?.orphanAccounts || []).length;
+      const messages = warnings.slice(0, 4);
+      if (orphanCount) messages.unshift(`社員マスタに紐付かないアカウントが ${orphanCount}件あります。`);
+      commonAccountIntegrity.classList.toggle("is-visible", messages.length > 0);
+      commonAccountIntegrity.innerHTML = messages.length
+        ? `<strong>確認事項</strong><br>${messages.map((item) => escapeHtml(item)).join("<br>")}${warnings.length > 4 ? `<br>ほか ${warnings.length - 4}件` : ""}`
+        : "";
+    }
+
+    function renderCommonAccountPanel() {
+      const management = state.accountManagement || {};
+      const rows = getCommonEmployeeRows();
+      renderCommonAccountFilterOptions(rows);
+      const filteredRows = getFilteredCommonAccountRows();
+      renderCommonAccountSummary(rows);
+      renderCommonAccountIntegrity();
+
+      if (commonAccountKeywordInput && commonAccountKeywordInput.value !== toText(management.keyword)) {
+        commonAccountKeywordInput.value = toText(management.keyword);
+      }
+      if (commonAccountStatusFilter) commonAccountStatusFilter.value = management.statusFilter || "all";
+      if (commonAccountResultCount) commonAccountResultCount.textContent = `${filteredRows.length}件 / 全${rows.length}件`;
+      if (commonAccountTableBody) commonAccountTableBody.innerHTML = filteredRows.map(renderCommonAccountTableRow).join("");
+      if (commonAccountMobileList) commonAccountMobileList.innerHTML = filteredRows.map(renderCommonAccountCard).join("");
+      if (commonAccountEmpty) commonAccountEmpty.classList.toggle("is-visible", management.status === "ready" && filteredRows.length === 0);
+
+      const loading = management.status === "loading";
+      const hasRows = rows.length > 0;
+      if (commonAccountReloadButton) {
+        commonAccountReloadButton.disabled = loading || !APP_CONFIG.gasConnected;
+        commonAccountReloadButton.innerHTML = loading
+          ? '<i data-lucide="loader-2"></i>読込中'
+          : '<i data-lucide="refresh-cw"></i>最新情報を再読込';
+      }
+      [commonAccountKeywordInput, commonAccountStatusFilter, commonAccountDepartmentFilter, commonAccountWorkplaceFilter, commonAccountClearFilterButton]
+        .filter(Boolean).forEach((element) => { element.disabled = loading || !hasRows; });
+      if (commonAccountStatusChip) {
+        commonAccountStatusChip.className = `status-chip ${management.status === "error" ? "warning" : hasRows ? "sample" : "offline"}`;
+        commonAccountStatusChip.innerHTML = loading
+          ? '<i data-lucide="loader-2"></i>読込中'
+          : management.status === "error"
+            ? '<i data-lucide="triangle-alert"></i>取得失敗'
+            : `<i data-lucide="users"></i>${rows.length}人`;
+      }
+      if (commonAccountMessage) {
+        commonAccountMessage.textContent = management.message || "管理メニューを開くと最新の共通アカウント情報を取得します。";
+      }
+    }
+
+    function setAccountManagementView(view) {
+      const nextView = view === "administrator" ? "administrator" : "common";
+      state.accountManagement.activeView = nextView;
+      renderAccountManagementPanel();
+      refreshIcons();
+      window.setTimeout(() => {
+        if (nextView === "common") commonAccountKeywordInput?.focus();
+        else accountAdminTargetSelect?.focus();
+      }, 0);
+    }
+
+    function handleCommonAccountAction(action, employeeId) {
+      const row = getCommonEmployeeRows().find((item) => toText(item.employee_id) === toText(employeeId));
+      if (!row) {
+        showToast("対象社員の共通アカウント情報が見つかりません。最新情報を再読込してください。");
+        return;
+      }
+      if (action === "detail") {
+        const status = getCommonAccountStatusMeta(row.management_status);
+        const roles = (row.app_roles || []).map((item) => `${item.app_code}/${item.role}`).join(", ") || "権限なし";
+        showToast(`${row.display_name || row.employee_no}: ${status.label} / login_id ${row.login_id || "未発行"} / ${roles}`);
+        return;
+      }
+      const actionLabels = {
+        issue: "共通アカウント発行",
+        reset: "パスワード再初期化",
+        suspend: "アカウント停止",
+        reactivate: "アカウント再開",
+      };
+      showToast(`${row.display_name || row.employee_no}の「${actionLabels[action] || action}」は次工程で書込みAPIへ接続します。`);
     }
 
     function getSelectedManagedAccount() {
@@ -5004,6 +5706,22 @@
       const loading = management.status === "loading";
       const resetting = management.status === "resetting";
       const busy = loading || resetting;
+      const activeView = management.activeView === "administrator" ? "administrator" : "common";
+
+      if (accountManagementTabs) accountManagementTabs.hidden = !canAdminister;
+      if (commonAccountsTabButton) {
+        commonAccountsTabButton.classList.toggle("is-active", activeView === "common");
+        commonAccountsTabButton.setAttribute("aria-selected", activeView === "common" ? "true" : "false");
+        commonAccountsTabButton.disabled = !canAdminister;
+      }
+      if (administratorAccountsTabButton) {
+        administratorAccountsTabButton.classList.toggle("is-active", activeView === "administrator");
+        administratorAccountsTabButton.setAttribute("aria-selected", activeView === "administrator" ? "true" : "false");
+        administratorAccountsTabButton.disabled = !canAdminister;
+      }
+      if (commonAccountPanel) {
+        commonAccountPanel.hidden = !canAdminister || activeView !== "common";
+      }
 
       if (headerAdminMenuButton) {
         headerAdminMenuButton.hidden = !canAdminister;
@@ -5011,8 +5729,9 @@
         headerAdminMenuButton.setAttribute("aria-hidden", canAdminister ? "false" : "true");
       }
       if (accountAdminPanel) {
-        accountAdminPanel.hidden = !canAdminister;
-        accountAdminPanel.setAttribute("aria-hidden", canAdminister ? "false" : "true");
+        const showAdministratorPanel = canAdminister && activeView === "administrator";
+        accountAdminPanel.hidden = !showAdministratorPanel;
+        accountAdminPanel.setAttribute("aria-hidden", showAdministratorPanel ? "false" : "true");
       }
       if (!canAdminister) {
         if (accountAdminModalBackdrop?.classList.contains("is-open")) {
@@ -5022,6 +5741,8 @@
         clearAccountManagementInputs();
         return;
       }
+
+      renderCommonAccountPanel();
 
       const accounts = Array.isArray(management.accounts) ? management.accounts : [];
       const previous = toText(
@@ -5145,6 +5866,11 @@
           summary,
           integrityCheck,
           selectedAccountId: accounts.find((account) => account.can_reset_password)?.account_id || "",
+          activeView: state.accountManagement.activeView || "common",
+          keyword: state.accountManagement.keyword || "",
+          statusFilter: state.accountManagement.statusFilter || "all",
+          departmentFilter: state.accountManagement.departmentFilter || "all",
+          workplaceFilter: state.accountManagement.workplaceFilter || "all",
           message: result.message || `アカウント管理情報を ${accounts.length}件取得しました。`,
           lastError: "",
         };
@@ -5175,6 +5901,11 @@
           summary: {},
           integrityCheck: result?.data?.integrityCheck || {},
           selectedAccountId: "",
+          activeView: state.accountManagement.activeView || "common",
+          keyword: state.accountManagement.keyword || "",
+          statusFilter: state.accountManagement.statusFilter || "all",
+          departmentFilter: state.accountManagement.departmentFilter || "all",
+          workplaceFilter: state.accountManagement.workplaceFilter || "all",
           message,
           lastError: Array.isArray(blockers) ? blockers.join(" / ") : message,
         };
@@ -8213,6 +8944,71 @@
       if (headerAdminMenuButton) {
         headerAdminMenuButton.addEventListener("click", openAccountAdminModal);
       }
+
+      if (commonAccountsTabButton) {
+        commonAccountsTabButton.addEventListener("click", () => setAccountManagementView("common"));
+      }
+      if (administratorAccountsTabButton) {
+        administratorAccountsTabButton.addEventListener("click", () => setAccountManagementView("administrator"));
+      }
+      if (commonAccountKeywordInput) {
+        commonAccountKeywordInput.addEventListener("input", (event) => {
+          state.accountManagement.keyword = event.target.value;
+          renderCommonAccountPanel();
+          refreshIcons();
+        });
+      }
+      if (commonAccountStatusFilter) {
+        commonAccountStatusFilter.addEventListener("change", (event) => {
+          state.accountManagement.statusFilter = event.target.value;
+          renderCommonAccountPanel();
+          refreshIcons();
+        });
+      }
+      if (commonAccountDepartmentFilter) {
+        commonAccountDepartmentFilter.addEventListener("change", (event) => {
+          state.accountManagement.departmentFilter = event.target.value;
+          renderCommonAccountPanel();
+          refreshIcons();
+        });
+      }
+      if (commonAccountWorkplaceFilter) {
+        commonAccountWorkplaceFilter.addEventListener("change", (event) => {
+          state.accountManagement.workplaceFilter = event.target.value;
+          renderCommonAccountPanel();
+          refreshIcons();
+        });
+      }
+      if (commonAccountClearFilterButton) {
+        commonAccountClearFilterButton.addEventListener("click", () => {
+          state.accountManagement.keyword = "";
+          state.accountManagement.statusFilter = "all";
+          state.accountManagement.departmentFilter = "all";
+          state.accountManagement.workplaceFilter = "all";
+          renderCommonAccountPanel();
+          refreshIcons();
+          showToast("共通アカウントの検索条件をクリアしました。");
+        });
+      }
+      if (commonAccountReloadButton) {
+        commonAccountReloadButton.addEventListener("click", () => loadAccountManagementData());
+      }
+      if (commonAccountSummary) {
+        commonAccountSummary.addEventListener("click", (event) => {
+          const button = event.target.closest("[data-common-account-status-filter]");
+          if (!button) return;
+          state.accountManagement.statusFilter = button.dataset.commonAccountStatusFilter || "all";
+          renderCommonAccountPanel();
+          refreshIcons();
+        });
+      }
+      [commonAccountTableBody, commonAccountMobileList].filter(Boolean).forEach((container) => {
+        container.addEventListener("click", (event) => {
+          const button = event.target.closest("[data-common-account-action]");
+          if (!button) return;
+          handleCommonAccountAction(button.dataset.commonAccountAction, button.dataset.employeeId);
+        });
+      });
 
       if (logoutButton) {
         logoutButton.addEventListener("click", handleLogout);
