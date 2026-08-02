@@ -1,3 +1,10 @@
+<!--
+  v1.8-10a: 管理メニューのGAS接続安定化。
+              getAccountManagementDataのみ通信タイムアウトを30秒へ延長し、
+              読取専用処理として1回だけ自動再試行する。
+              同時二重読込を防止し、再読込失敗時は前回取得済み一覧を維持する。
+              HTML側のみ通信制御変更。DB変更なし、GASデプロイURL変更なし。
+-->
 <!DOCTYPE html>
 <!--
   v1.8-10: GAS側へ社員本人用共通アカウント専用のログイン・パスワード変更・セッション確認・ログアウトAPIを追加。
@@ -96,7 +103,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>社員マスタ v1.8-10_work</title>
+  <title>社員マスタ v1.8-10a_work</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
@@ -3751,11 +3758,17 @@
     const GAS_DEPLOY_URL = "https://script.google.com/macros/s/AKfycbxOY4thFjX4f43TxXNaCGlh5_HXpgP70xZGyyq9sCemUgNSWCmnMt_8-q2EB1tgLsUMHg/exec"; // GAS WebアプリのデプロイURL。
 
     const APP_CONFIG = {
-      version: "v1.8-10_work",
-      modeLabel: "v1.8-10 work 作業版",
+      version: "v1.8-10a_work",
+      modeLabel: "v1.8-10a work 作業版",
       gasEndpoint: GAS_DEPLOY_URL.trim(),
       useSampleFallback: false,
       apiTimeoutMs: 15000,
+      apiTimeoutByAction: {
+        getAccountManagementData: 30000,
+      },
+      apiMaxAttemptsByAction: {
+        getAccountManagementData: 2,
+      },
       authSessionValidationIntervalMs: 10 * 60 * 1000,
       authSessionFocusValidationMinIntervalMs: 60 * 1000,
       get gasConnected() {
@@ -4106,6 +4119,7 @@
     };
 
     let authSessionValidationPromise = null;
+    let accountManagementLoadPromise = null;
     let lastAuthSessionValidationAt = 0;
     let authContextRevision = 0;
 
@@ -6134,12 +6148,15 @@
       [commonAccountKeywordInput, commonAccountStatusFilter, commonAccountDepartmentFilter, commonAccountWorkplaceFilter, commonAccountClearFilterButton]
         .filter(Boolean).forEach((element) => { element.disabled = loading || !hasRows; });
       if (commonAccountStatusChip) {
-        commonAccountStatusChip.className = `status-chip ${management.status === "error" ? "warning" : hasRows ? "sample" : "offline"}`;
+        const stale = management.status === "stale";
+        commonAccountStatusChip.className = `status-chip ${management.status === "error" || stale ? "warning" : hasRows ? "sample" : "offline"}`;
         commonAccountStatusChip.innerHTML = loading
           ? '<i data-lucide="loader-2"></i>読込中'
           : management.status === "error"
             ? '<i data-lucide="triangle-alert"></i>取得失敗'
-            : `<i data-lucide="users"></i>${rows.length}人`;
+            : stale
+              ? `<i data-lucide="history"></i>前回表示 ${rows.length}人`
+              : `<i data-lucide="users"></i>${rows.length}人`;
       }
       if (commonAccountMessage) {
         commonAccountMessage.textContent = management.message || "管理メニューを開くと最新の共通アカウント情報を取得します。";
@@ -6316,101 +6333,139 @@
       }
     }
 
-    async function loadAccountManagementData({ silent = false } = {}) {
+    async function loadAccountManagementData({ silent = false, force = false } = {}) {
       if (!hasSystemAdminAccess()) {
         resetAccountManagementState("アカウント管理には system_admin 権限が必要です。");
         renderAccountManagementPanel();
         return;
       }
+
+      if (accountManagementLoadPromise && !force) {
+        return accountManagementLoadPromise;
+      }
+
+      const previous = {
+        accounts: Array.isArray(state.accountManagement.accounts) ? state.accountManagement.accounts : [],
+        employeeAccountRows: Array.isArray(state.accountManagement.employeeAccountRows)
+          ? state.accountManagement.employeeAccountRows
+          : [],
+        administratorAccounts: Array.isArray(state.accountManagement.administratorAccounts)
+          ? state.accountManagement.administratorAccounts
+          : [],
+        orphanAccounts: Array.isArray(state.accountManagement.orphanAccounts)
+          ? state.accountManagement.orphanAccounts
+          : [],
+        summary: state.accountManagement.summary || {},
+        integrityCheck: state.accountManagement.integrityCheck || {},
+      };
+      const hadPreviousData = Boolean(
+        previous.accounts.length ||
+        previous.employeeAccountRows.length ||
+        previous.administratorAccounts.length ||
+        previous.orphanAccounts.length
+      );
+
       state.accountManagement = {
         ...state.accountManagement,
         status: "loading",
-        message: "アカウント一覧を読み込んでいます。",
+        message: "アカウント一覧を読み込んでいます。GASの初回起動時は少し時間がかかる場合があります。",
         lastError: "",
       };
       renderAccountManagementPanel();
       refreshIcons();
 
-      try {
-        const result = await callEmployeeApi(APP_CONFIG.apiActions.getAccountManagementData, {
-          auth: buildCurrentAuthPayload(),
-        });
-        const accounts = Array.isArray(result?.data?.accounts) ? result.data.accounts : [];
-        const employeeAccountRows = Array.isArray(result?.data?.employeeAccountRows)
-          ? result.data.employeeAccountRows
-          : [];
-        const administratorAccounts = Array.isArray(result?.data?.administratorAccounts)
-          ? result.data.administratorAccounts
-          : accounts;
-        const orphanAccounts = Array.isArray(result?.data?.orphanAccounts)
-          ? result.data.orphanAccounts
-          : [];
-        const summary = result?.data?.summary && typeof result.data.summary === "object"
-          ? result.data.summary
-          : {};
-        const integrityCheck = result?.data?.integrityCheck && typeof result.data.integrityCheck === "object"
-          ? result.data.integrityCheck
-          : {};
-        state.accountManagement = {
-          status: "ready",
-          accounts,
-          employeeAccountRows,
-          administratorAccounts,
-          orphanAccounts,
-          summary,
-          integrityCheck,
-          selectedAccountId: accounts.find((account) => account.can_reset_password)?.account_id || "",
-          activeView: state.accountManagement.activeView || "common",
-          keyword: state.accountManagement.keyword || "",
-          statusFilter: state.accountManagement.statusFilter || "all",
-          departmentFilter: state.accountManagement.departmentFilter || "all",
-          workplaceFilter: state.accountManagement.workplaceFilter || "all",
-          message: result.message || `アカウント管理情報を ${accounts.length}件取得しました。`,
-          lastError: "",
-        };
-        appendOperationLog("getAccountManagementData", "ok", state.accountManagement.message, {
-          compatibility_account_count: accounts.length,
-          employee_account_row_count: employeeAccountRows.length,
-          administrator_account_count: administratorAccounts.length,
-          orphan_account_count: orphanAccounts.length,
-          integrity_status: integrityCheck.status || "",
-          password_hash_returned: result?.data?.password_hash_returned === false ? "FALSE" : "未返却確認対象",
-          auth_session_token_returned: result?.data?.auth_session_token_returned === false ? "FALSE" : "未返却確認対象",
-        });
-        if (!silent) showToast(state.accountManagement.message);
-      } catch (error) {
-        if (isDiscardedAuthContextError(error)) return;
-        const result = error.apiResult || {};
-        const blockers = result?.data?.integrityCheck?.blockers ||
-          result?.data?.safetyCheck?.blockers ||
-          result?.data?.authorization?.blockers ||
-          [];
-        const message = result.message || error.message || "アカウント一覧の取得に失敗しました。";
-        state.accountManagement = {
-          status: "error",
-          accounts: [],
-          employeeAccountRows: [],
-          administratorAccounts: [],
-          orphanAccounts: [],
-          summary: {},
-          integrityCheck: result?.data?.integrityCheck || {},
-          selectedAccountId: "",
-          activeView: state.accountManagement.activeView || "common",
-          keyword: state.accountManagement.keyword || "",
-          statusFilter: state.accountManagement.statusFilter || "all",
-          departmentFilter: state.accountManagement.departmentFilter || "all",
-          workplaceFilter: state.accountManagement.workplaceFilter || "all",
-          message,
-          lastError: Array.isArray(blockers) ? blockers.join(" / ") : message,
-        };
-        appendOperationLog("getAccountManagementData", "error", message, {
-          blockers: Array.isArray(blockers) ? blockers.join(" / ") : "",
-        });
-        if (!silent) showToast(message);
-      } finally {
-        renderAccountManagementPanel();
-        refreshIcons();
-      }
+      accountManagementLoadPromise = (async () => {
+        try {
+          const result = await callEmployeeApi(APP_CONFIG.apiActions.getAccountManagementData, {
+            auth: buildCurrentAuthPayload(),
+          });
+          const accounts = Array.isArray(result?.data?.accounts) ? result.data.accounts : [];
+          const employeeAccountRows = Array.isArray(result?.data?.employeeAccountRows)
+            ? result.data.employeeAccountRows
+            : [];
+          const administratorAccounts = Array.isArray(result?.data?.administratorAccounts)
+            ? result.data.administratorAccounts
+            : accounts;
+          const orphanAccounts = Array.isArray(result?.data?.orphanAccounts)
+            ? result.data.orphanAccounts
+            : [];
+          const summary = result?.data?.summary && typeof result.data.summary === "object"
+            ? result.data.summary
+            : {};
+          const integrityCheck = result?.data?.integrityCheck && typeof result.data.integrityCheck === "object"
+            ? result.data.integrityCheck
+            : {};
+          state.accountManagement = {
+            status: "ready",
+            accounts,
+            employeeAccountRows,
+            administratorAccounts,
+            orphanAccounts,
+            summary,
+            integrityCheck,
+            selectedAccountId: accounts.find((account) => account.can_reset_password)?.account_id || "",
+            activeView: state.accountManagement.activeView || "common",
+            keyword: state.accountManagement.keyword || "",
+            statusFilter: state.accountManagement.statusFilter || "all",
+            departmentFilter: state.accountManagement.departmentFilter || "all",
+            workplaceFilter: state.accountManagement.workplaceFilter || "all",
+            message: result.message || `アカウント管理情報を ${accounts.length}件取得しました。`,
+            lastError: "",
+          };
+          appendOperationLog("getAccountManagementData", "ok", state.accountManagement.message, {
+            compatibility_account_count: accounts.length,
+            employee_account_row_count: employeeAccountRows.length,
+            administrator_account_count: administratorAccounts.length,
+            orphan_account_count: orphanAccounts.length,
+            integrity_status: integrityCheck.status || "",
+            password_hash_returned: result?.data?.password_hash_returned === false ? "FALSE" : "未返却確認対象",
+            auth_session_token_returned: result?.data?.auth_session_token_returned === false ? "FALSE" : "未返却確認対象",
+          });
+          if (!silent) showToast(state.accountManagement.message);
+          return result;
+        } catch (error) {
+          if (isDiscardedAuthContextError(error)) return;
+          const result = error.apiResult || {};
+          const blockers = result?.data?.integrityCheck?.blockers ||
+            result?.data?.safetyCheck?.blockers ||
+            result?.data?.authorization?.blockers ||
+            [];
+          const message = result.message || error.message || "アカウント一覧の取得に失敗しました。";
+          state.accountManagement = {
+            status: hadPreviousData ? "stale" : "error",
+            accounts: hadPreviousData ? previous.accounts : [],
+            employeeAccountRows: hadPreviousData ? previous.employeeAccountRows : [],
+            administratorAccounts: hadPreviousData ? previous.administratorAccounts : [],
+            orphanAccounts: hadPreviousData ? previous.orphanAccounts : [],
+            summary: hadPreviousData ? previous.summary : {},
+            integrityCheck: hadPreviousData ? previous.integrityCheck : (result?.data?.integrityCheck || {}),
+            selectedAccountId: hadPreviousData
+              ? (state.accountManagement.selectedAccountId || previous.accounts.find((account) => account.can_reset_password)?.account_id || "")
+              : "",
+            activeView: state.accountManagement.activeView || "common",
+            keyword: state.accountManagement.keyword || "",
+            statusFilter: state.accountManagement.statusFilter || "all",
+            departmentFilter: state.accountManagement.departmentFilter || "all",
+            workplaceFilter: state.accountManagement.workplaceFilter || "all",
+            message: hadPreviousData
+              ? `最新情報の再読込に失敗したため、前回取得した一覧を表示しています。${message}`
+              : message,
+            lastError: Array.isArray(blockers) && blockers.length ? blockers.join(" / ") : message,
+          };
+          appendOperationLog("getAccountManagementData", "error", message, {
+            blockers: Array.isArray(blockers) ? blockers.join(" / ") : "",
+            previous_data_preserved: hadPreviousData ? "TRUE" : "FALSE",
+          });
+          showToast(hadPreviousData ? "再読込に失敗したため、前回の一覧を表示しています。" : message);
+          return null;
+        } finally {
+          accountManagementLoadPromise = null;
+          renderAccountManagementPanel();
+          refreshIcons();
+        }
+      })();
+
+      return accountManagementLoadPromise;
     }
 
     function buildAccountResetClientBlockers() {
@@ -6725,6 +6780,33 @@
       };
     }
 
+    function getApiTimeoutMs(action) {
+      const configured = Number(APP_CONFIG.apiTimeoutByAction?.[action]);
+      return Number.isFinite(configured) && configured > 0
+        ? configured
+        : APP_CONFIG.apiTimeoutMs;
+    }
+
+    function getApiMaxAttempts(action) {
+      if (isIdempotentMutationAction(action)) return 2;
+      const configured = Number(APP_CONFIG.apiMaxAttemptsByAction?.[action]);
+      return Number.isFinite(configured) && configured >= 1
+        ? Math.floor(configured)
+        : 1;
+    }
+
+    function showApiRetryProgress(action, nextAttempt, maxAttempts) {
+      if (action !== APP_CONFIG.apiActions.getAccountManagementData) return;
+      state.accountManagement = {
+        ...state.accountManagement,
+        status: "loading",
+        message: `GASの応答が遅いため再接続しています（${nextAttempt}/${maxAttempts}回目）。`,
+        lastError: "",
+      };
+      renderAccountManagementPanel();
+      refreshIcons();
+    }
+
     async function fetchWithTimeout(url, options = {}, timeoutMs = APP_CONFIG.apiTimeoutMs) {
       const controller = new AbortController();
       const timerId = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -6764,7 +6846,8 @@
       }
 
       const requestBody = JSON.stringify(buildApiRequest(action, effectivePayload));
-      const maxAttempts = isIdempotentMutationAction(action) ? 2 : 1;
+      const maxAttempts = getApiMaxAttempts(action);
+      const timeoutMs = getApiTimeoutMs(action);
       let result = null;
 
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -6776,7 +6859,7 @@
               "Content-Type": "text/plain;charset=utf-8",
             },
             body: requestBody,
-          });
+          }, timeoutMs);
 
           if (!response.ok) {
             throw new Error(`GAS通信に失敗しました。status=${response.status}`);
@@ -6787,11 +6870,15 @@
         } catch (error) {
           if (authContextBound) assertApiAuthContextUnchanged(action, startedAuthContextRevision);
           if (attempt >= maxAttempts) throw error;
-          console.warn(`社員マスタ ${APP_CONFIG.version}: ${action} の通信結果を確定できなかったため、同一request_idで1回だけ再送します。`, {
+          const nextAttempt = attempt + 1;
+          console.warn(`社員マスタ ${APP_CONFIG.version}: ${action} の通信結果を確定できなかったため再送します。`, {
             attempt,
+            next_attempt: nextAttempt,
+            max_attempts: maxAttempts,
             request_id: effectivePayload?.request_id || "",
           });
-          await new Promise((resolve) => window.setTimeout(resolve, 350));
+          showApiRetryProgress(action, nextAttempt, maxAttempts);
+          await new Promise((resolve) => window.setTimeout(resolve, 800));
         }
       }
 
