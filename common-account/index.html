@@ -1,11 +1,18 @@
 <!--
+  梅園共通アカウント設定 v1.8 complete 固定化
+  - v1.8-10b_work の実機確認済み版を固定保管版として整理。
+  - 画面版表示とAPP_CONFIG.versionのみ v1.8_complete に更新。
+  - 画面機能・DB・GASデプロイURL変更なし。
+  - v1.8 complete は固定保管版として直接編集しない。
+-->
+<!--
   v1.8-10b: 共通アカウント認証セッションの永続フォールバック対応。
               GAS応答待ちを15秒から30秒へ延長。
               画面機能・DB・GASデプロイURL変更なし。
 -->
 <!DOCTYPE html>
 <!--
-  梅園共通アカウント設定 v1.8-10b_work
+  梅園共通アカウント設定 v1.8_complete
   社員本人用共通アカウントの初回パスワード設定・通常パスワード変更専用画面。
   社員一覧、個人情報、他社員情報、アプリ権限編集、社員マスタ管理機能は取得・表示しない。
 -->
@@ -166,13 +173,13 @@
       <p id="accountMessage" class="message" aria-live="polite"></p>
     </section>
 
-    <p class="version">v1.8-10b_work</p>
+    <p class="version">v1.8_complete</p>
   </main>
 
   <script>
     "use strict";
     const APP_CONFIG = {
-      version: "v1.8-10b_work",
+      version: "v1.8_complete",
       gasEndpoint: "https://script.google.com/macros/s/AKfycbxOY4thFjX4f43TxXNaCGlh5_HXpgP70xZGyyq9sCemUgNSWCmnMt_8-q2EB1tgLsUMHg/exec",
       apiTimeoutMs: 30000,
       sessionValidationIntervalMs: 15 * 60 * 1000,

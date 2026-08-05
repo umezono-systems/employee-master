@@ -1,4 +1,12 @@
 <!--
+  社員マスタ v1.8 complete 固定化
+  - 管理画面HTMLは v1.8-10b_work の実機確認済み版を固定保管版として整理。
+  - GASは v1.8-10c_work の精査・修正・実機確認済み版を採用。
+  - HTMLタイトル・APP_CONFIG.version・画面モード表示を v1.8_complete に更新。
+  - 処理追加なし、DB変更なし、GASデプロイURL変更なし。
+  - v1.8 complete は固定保管版として直接編集しない。
+-->
+<!--
   v1.8-10b: 社員マスタのログイン・初期読込安定化。
               loginEmployeeは30秒、getEmployeeInitialDataは45秒へ延長。
               初期データ読込と認証状態再確認は読取専用として1回だけ自動再試行。
@@ -112,7 +120,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>社員マスタ v1.8-10b_work</title>
+  <title>社員マスタ v1.8_complete</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
@@ -3767,8 +3775,8 @@
     const GAS_DEPLOY_URL = "https://script.google.com/macros/s/AKfycbxOY4thFjX4f43TxXNaCGlh5_HXpgP70xZGyyq9sCemUgNSWCmnMt_8-q2EB1tgLsUMHg/exec"; // GAS WebアプリのデプロイURL。
 
     const APP_CONFIG = {
-      version: "v1.8-10b_work",
-      modeLabel: "v1.8-10b work 作業版",
+      version: "v1.8_complete",
+      modeLabel: "v1.8 complete 固定保管版",
       gasEndpoint: GAS_DEPLOY_URL.trim(),
       useSampleFallback: false,
       apiTimeoutMs: 15000,
