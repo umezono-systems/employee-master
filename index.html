@@ -1,5 +1,14 @@
 <!--
-  社員マスタ v1.9-1_work
+  社員マスタ v1.9 complete 固定化
+  - v1.9-1_work の実機確認済み版を固定保管版として整理。
+  - 社員本人用共通アカウントの管理者再初期化・停止・再開を固定。
+  - 再初期化・停止時はポータル端末認証を失効し、再開時は旧端末認証を復活させない。
+  - 再開は在籍中かつ有効な社員のみ許可。
+  - DB列追加なし。既存システム管理者向け再初期化機能は維持。
+  - v1.9 complete は固定保管版として直接編集しない。
+-->
+<!--
+  社員マスタ v1.9_complete
   - v1.8_complete は固定保管版として直接編集せず、新しい work 版として開始。
   - 社員本人用共通アカウント一覧の「再初期化」「停止」「再開」を実処理へ接続。
   - 3操作とも system_admin 権限と管理者本人の現在パスワードをGAS側で再確認する。
@@ -131,7 +140,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>社員マスタ v1.9-1_work</title>
+  <title>社員マスタ v1.9_complete</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
@@ -2707,7 +2716,7 @@
           <span id="dataSourceChip" class="status-chip offline"><i data-lucide="lock-keyhole"></i>ログイン後に読込</span>
           <span id="gasStatusChip" class="status-chip offline"><i data-lucide="wifi-off"></i>GAS未接続</span>
           <span id="authStatusChip" class="status-chip warning"><i data-lucide="lock"></i>未ログイン</span>
-          <span id="versionChip" class="status-chip"><i data-lucide="wand-sparkles"></i>v1.8-5_work</span>
+          <span id="versionChip" class="status-chip"><i data-lucide="wand-sparkles"></i>v1.9_complete</span>
         </div>
       </div>
     </header>
@@ -3850,7 +3859,7 @@
     const GAS_DEPLOY_URL = "https://script.google.com/macros/s/AKfycbxOY4thFjX4f43TxXNaCGlh5_HXpgP70xZGyyq9sCemUgNSWCmnMt_8-q2EB1tgLsUMHg/exec"; // GAS WebアプリのデプロイURL。
 
     const APP_CONFIG = {
-      version: "v1.9-1_work",
+      version: "v1.9_complete",
       modeLabel: "v1.9-1 work / 共通アカウント管理操作",
       gasEndpoint: GAS_DEPLOY_URL.trim(),
       useSampleFallback: false,
