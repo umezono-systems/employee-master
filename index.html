@@ -1,4 +1,15 @@
 <!--
+  社員マスタ v1.11-1_work 店舗共有アカウント管理
+  - v1.10_complete は固定保管版として直接編集せず、新しいwork版として開始。
+  - 管理メニューに「店舗共有アカウント」タブを追加。
+  - _sys_workplaceから店舗を選択し、共有アカウント名・ログインID・初期パスワードを設定して発行できる。
+  - 店舗共有アカウントの停止・再開・パスワード再設定・登録端末一覧確認・端末個別失効へ対応。
+  - 停止・パスワード再設定時は既存ポータル端末認証を失効。再開しても旧端末認証は復活しない。
+  - 共有アカウントはemployee_idを持たず、ポータル書込み時だけ操作者社員番号を確認する既存方針を維持。
+  - 書込み操作はsystem_admin権限と管理者本人の現在パスワードを再確認する。
+  - 既存DB列を使用。社員情報・掲示DB・共通アカウント設定画面の処理変更なし。
+-->
+<!--
   社員マスタ v1.9 complete 固定化
   - v1.9-1_work の実機確認済み版を固定保管版として整理。
   - 社員本人用共通アカウントの管理者再初期化・停止・再開を固定。
@@ -140,7 +151,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>社員マスタ v1.10_complete</title>
+  <title>社員マスタ v1.11-1_work</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
@@ -1188,6 +1199,63 @@
     .common-account-table .account-app-column { width: 190px; }
     .common-account-table .account-updated-column { width: 145px; }
     .common-account-table .account-actions-column { width: 205px; }
+
+    .shared-account-table { min-width: 980px; }
+    .shared-account-table th:nth-child(1) { width: 170px; }
+    .shared-account-table th:nth-child(2) { width: 190px; }
+    .shared-account-table th:nth-child(3) { width: 120px; }
+    .shared-account-table th:nth-child(4) { width: 130px; }
+    .shared-account-table th:nth-child(5) { width: 145px; }
+    .shared-account-table th:nth-child(6) { width: 225px; }
+
+    .shared-device-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .shared-device-card {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid var(--ume-line);
+      border-radius: 12px;
+      background: #fff;
+    }
+
+    .shared-device-card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .shared-device-card-meta {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 7px;
+    }
+
+    .shared-device-card-meta div {
+      padding: 7px 8px;
+      border-radius: 9px;
+      background: var(--ume-cream);
+    }
+
+    .shared-device-card-meta span {
+      display: block;
+      color: var(--ume-muted);
+      font-size: 0.68rem;
+      font-weight: 800;
+    }
+
+    .shared-device-card-meta strong {
+      display: block;
+      margin-top: 2px;
+      color: var(--ume-text);
+      font-size: 0.78rem;
+      overflow-wrap: anywhere;
+    }
 
     .common-account-person-name {
       display: block;
@@ -2716,7 +2784,7 @@
           <span id="dataSourceChip" class="status-chip offline"><i data-lucide="lock-keyhole"></i>ログイン後に読込</span>
           <span id="gasStatusChip" class="status-chip offline"><i data-lucide="wifi-off"></i>GAS未接続</span>
           <span id="authStatusChip" class="status-chip warning"><i data-lucide="lock"></i>未ログイン</span>
-          <span id="versionChip" class="status-chip"><i data-lucide="wand-sparkles"></i>v1.10_complete</span>
+          <span id="versionChip" class="status-chip"><i data-lucide="wand-sparkles"></i>v1.11-1_work</span>
         </div>
       </div>
     </header>
@@ -3410,6 +3478,10 @@
             aria-selected="true">
             <i data-lucide="users-round"></i>共通アカウント
           </button>
+          <button id="sharedAccountsTabButton" class="account-management-tab" type="button"
+            aria-selected="false">
+            <i data-lucide="store"></i>店舗共有アカウント
+          </button>
           <button id="administratorAccountsTabButton" class="account-management-tab" type="button"
             aria-selected="false">
             <i data-lucide="shield-check"></i>システム管理者アカウント
@@ -3498,6 +3570,57 @@
           </div>
           <p id="commonAccountMessage" class="account-admin-message">
             管理メニューを開くと最新の共通アカウント情報を取得します。
+          </p>
+        </section>
+
+        <section id="sharedAccountPanel" class="common-account-panel" aria-label="店舗共有アカウント管理" hidden>
+          <div class="account-admin-head">
+            <div>
+              <h3 class="account-admin-title">店舗共有アカウント管理</h3>
+              <p class="account-admin-note">
+                店舗タブレット・共用PC用の共有アカウントを管理します。共有端末からの投稿時は、保存直前に操作者の社員番号を確認します。
+              </p>
+            </div>
+            <span id="sharedAccountStatusChip" class="status-chip offline"><i data-lucide="store"></i>読込前</span>
+          </div>
+
+          <div id="sharedAccountSummary" class="common-account-summary" aria-label="店舗共有アカウント状態件数"></div>
+
+          <div class="common-account-result-head">
+            <div>
+              <h4 class="common-account-result-title">店舗共有アカウント</h4>
+              <span id="sharedAccountResultCount" class="common-account-result-count">0件</span>
+            </div>
+            <div class="common-account-actions">
+              <button id="sharedAccountIssueButton" class="button primary" type="button">
+                <i data-lucide="store"></i>店舗アカウントを発行
+              </button>
+              <button id="sharedAccountReloadButton" class="button" type="button">
+                <i data-lucide="refresh-cw"></i>最新情報を再読込
+              </button>
+            </div>
+          </div>
+
+          <div class="common-account-table-wrap">
+            <table class="common-account-table shared-account-table" aria-label="店舗共有アカウント一覧">
+              <thead>
+                <tr>
+                  <th>店舗</th>
+                  <th>アカウント</th>
+                  <th>状態</th>
+                  <th>登録端末</th>
+                  <th>更新日時</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="sharedAccountTableBody"></tbody>
+            </table>
+          </div>
+
+          <div id="sharedAccountMobileList" class="common-account-mobile-list" aria-label="店舗共有アカウント一覧"></div>
+          <div id="sharedAccountEmpty" class="common-account-empty">店舗共有アカウントはまだ発行されていません。</div>
+          <p id="sharedAccountMessage" class="account-admin-message">
+            管理メニューを開くと最新の店舗共有アカウント情報を取得します。
           </p>
         </section>
 
@@ -3689,6 +3812,150 @@
     </article>
   </div>
 
+  <div id="sharedAccountIssueModalBackdrop" class="modal-backdrop common-account-issue-backdrop" role="dialog"
+    aria-modal="true" aria-labelledby="sharedAccountIssueModalTitle">
+    <article class="modal common-account-issue-modal">
+      <header class="modal-header">
+        <div class="modal-title-group">
+          <span class="modal-title-icon" aria-hidden="true"><i data-lucide="store"></i></span>
+          <div class="modal-title-copy">
+            <h2 id="sharedAccountIssueModalTitle" class="modal-title">店舗共有アカウント発行</h2>
+            <p class="modal-subtitle">店舗タブレット・共用PC用のログインアカウントを発行します</p>
+          </div>
+        </div>
+        <button id="closeSharedAccountIssueModalButton" class="button ghost" type="button"
+          aria-label="店舗共有アカウント発行画面を閉じる"><i data-lucide="x"></i>閉じる</button>
+      </header>
+      <div class="modal-body">
+        <div class="common-account-issue-grid">
+          <div class="field full">
+            <label for="sharedAccountIssueWorkplaceSelect">店舗</label>
+            <select id="sharedAccountIssueWorkplaceSelect" class="select">
+              <option value="">店舗を選択</option>
+            </select>
+          </div>
+          <div class="field full">
+            <label for="sharedAccountIssueAccountNameInput">アカウント名</label>
+            <input id="sharedAccountIssueAccountNameInput" class="input" type="text" maxlength="100"
+              autocomplete="off" placeholder="例：河原町店共有" />
+          </div>
+          <div class="field full">
+            <label for="sharedAccountIssueLoginIdInput">共有ログインID</label>
+            <input id="sharedAccountIssueLoginIdInput" class="input" type="text" maxlength="64"
+              autocomplete="off" placeholder="店舗端末の初回設定時に使用" />
+          </div>
+          <div class="field full">
+            <label for="sharedAccountIssueAdministratorPasswordInput">管理者自身の現在のパスワード</label>
+            <input id="sharedAccountIssueAdministratorPasswordInput" class="input" type="password"
+              autocomplete="current-password" placeholder="実行者本人のパスワード" />
+          </div>
+          <div class="field">
+            <label for="sharedAccountIssuePasswordInput">初期パスワード</label>
+            <input id="sharedAccountIssuePasswordInput" class="input" type="password"
+              autocomplete="new-password" placeholder="8～64文字" />
+          </div>
+          <div class="field">
+            <label for="sharedAccountIssuePasswordConfirmInput">初期パスワード（確認）</label>
+            <input id="sharedAccountIssuePasswordConfirmInput" class="input" type="password"
+              autocomplete="new-password" placeholder="もう一度入力" />
+          </div>
+        </div>
+        <p class="common-account-issue-note">
+          このパスワードは店舗端末の初回設定時に使用します。端末設定後は端末認証トークンで自動認証するため、日常利用でスタッフへパスワードを共有する必要はありません。
+        </p>
+        <p id="sharedAccountIssueMessage" class="common-account-issue-message" role="status">
+          店舗と入力内容を確認して発行してください。
+        </p>
+      </div>
+      <footer class="modal-footer">
+        <button id="sharedAccountIssueClearButton" class="button ghost" type="button"><i data-lucide="eraser"></i>入力をクリア</button>
+        <button id="cancelSharedAccountIssueModalButton" class="button" type="button"><i data-lucide="undo-2"></i>キャンセル</button>
+        <button id="sharedAccountIssueSubmitButton" class="button primary" type="button"><i data-lucide="store"></i>店舗アカウントを発行</button>
+      </footer>
+    </article>
+  </div>
+
+  <div id="sharedAccountOperationModalBackdrop" class="modal-backdrop common-account-issue-backdrop" role="dialog"
+    aria-modal="true" aria-labelledby="sharedAccountOperationModalTitle">
+    <article class="modal common-account-issue-modal">
+      <header class="modal-header">
+        <div class="modal-title-group">
+          <span id="sharedAccountOperationIcon" class="modal-title-icon" aria-hidden="true"><i data-lucide="settings-2"></i></span>
+          <div class="modal-title-copy">
+            <h2 id="sharedAccountOperationModalTitle" class="modal-title">店舗共有アカウント操作</h2>
+            <p id="sharedAccountOperationModalSubtitle" class="modal-subtitle">対象と操作内容を確認します</p>
+          </div>
+        </div>
+        <button id="closeSharedAccountOperationModalButton" class="button ghost" type="button"
+          aria-label="店舗共有アカウント操作画面を閉じる"><i data-lucide="x"></i>閉じる</button>
+      </header>
+      <div class="modal-body">
+        <div id="sharedAccountOperationTargetSummary" class="common-account-issue-summary"></div>
+        <div class="common-account-issue-grid">
+          <div class="field full">
+            <label for="sharedAccountOperationAdministratorPasswordInput">管理者自身の現在のパスワード</label>
+            <input id="sharedAccountOperationAdministratorPasswordInput" class="input" type="password"
+              autocomplete="current-password" placeholder="実行者本人のパスワード" />
+          </div>
+          <div id="sharedAccountOperationPasswordFields" class="field full" hidden>
+            <div class="common-account-issue-grid">
+              <div class="field">
+                <label for="sharedAccountOperationPasswordInput">新しい共有パスワード</label>
+                <input id="sharedAccountOperationPasswordInput" class="input" type="password"
+                  autocomplete="new-password" placeholder="8～64文字" />
+              </div>
+              <div class="field">
+                <label for="sharedAccountOperationPasswordConfirmInput">新しい共有パスワード（確認）</label>
+                <input id="sharedAccountOperationPasswordConfirmInput" class="input" type="password"
+                  autocomplete="new-password" placeholder="もう一度入力" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <p id="sharedAccountOperationNote" class="common-account-issue-note"></p>
+        <p id="sharedAccountOperationMessage" class="common-account-issue-message" role="status">
+          対象と操作内容を確認してください。
+        </p>
+      </div>
+      <footer class="modal-footer">
+        <button id="sharedAccountOperationClearButton" class="button ghost" type="button"><i data-lucide="eraser"></i>入力をクリア</button>
+        <button id="cancelSharedAccountOperationModalButton" class="button" type="button"><i data-lucide="undo-2"></i>キャンセル</button>
+        <button id="sharedAccountOperationSubmitButton" class="button primary" type="button"><i data-lucide="circle-check"></i>実行</button>
+      </footer>
+    </article>
+  </div>
+
+  <div id="sharedAccountDeviceModalBackdrop" class="modal-backdrop common-account-issue-backdrop" role="dialog"
+    aria-modal="true" aria-labelledby="sharedAccountDeviceModalTitle">
+    <article class="modal account-admin-modal">
+      <header class="modal-header">
+        <div class="modal-title-group">
+          <span class="modal-title-icon" aria-hidden="true"><i data-lucide="monitor-smartphone"></i></span>
+          <div class="modal-title-copy">
+            <h2 id="sharedAccountDeviceModalTitle" class="modal-title">登録端末</h2>
+            <p id="sharedAccountDeviceModalSubtitle" class="modal-subtitle">店舗共有アカウントに登録された端末認証を確認します</p>
+          </div>
+        </div>
+        <button id="closeSharedAccountDeviceModalButton" class="button ghost" type="button"
+          aria-label="登録端末画面を閉じる"><i data-lucide="x"></i>閉じる</button>
+      </header>
+      <div class="modal-body">
+        <div id="sharedAccountDeviceTargetSummary" class="common-account-issue-summary"></div>
+        <div class="field full">
+          <label for="sharedAccountDeviceAdministratorPasswordInput">端末失効時の管理者自身の現在のパスワード</label>
+          <input id="sharedAccountDeviceAdministratorPasswordInput" class="input" type="password"
+            autocomplete="current-password" placeholder="端末を失効する場合だけ入力" />
+        </div>
+        <div id="sharedAccountDeviceList" class="common-account-mobile-list shared-device-list"></div>
+        <div id="sharedAccountDeviceEmpty" class="common-account-empty">登録端末はありません。</div>
+        <p id="sharedAccountDeviceMessage" class="account-admin-message">有効な端末だけ個別に失効できます。</p>
+      </div>
+      <footer class="modal-footer">
+        <button id="cancelSharedAccountDeviceModalButton" class="button" type="button"><i data-lucide="undo-2"></i>閉じる</button>
+      </footer>
+    </article>
+  </div>
+
   <div id="detailModalBackdrop" class="modal-backdrop" role="dialog" aria-modal="true"
     aria-labelledby="detailModalTitle">
     <article class="modal employee-modal">
@@ -3859,8 +4126,8 @@
     const GAS_DEPLOY_URL = "https://script.google.com/macros/s/AKfycbxOY4thFjX4f43TxXNaCGlh5_HXpgP70xZGyyq9sCemUgNSWCmnMt_8-q2EB1tgLsUMHg/exec"; // GAS WebアプリのデプロイURL。
 
     const APP_CONFIG = {
-      version: "v1.10_complete",
-      modeLabel: "v1.9-1 work / 共通アカウント管理操作",
+      version: "v1.11-1_work",
+      modeLabel: "v1.11-1 work / 店舗共有アカウント管理",
       gasEndpoint: GAS_DEPLOY_URL.trim(),
       useSampleFallback: false,
       apiTimeoutMs: 15000,
@@ -3896,6 +4163,11 @@
         resetEmployeeCommonAccountPassword: "resetEmployeeCommonAccountPassword",
         suspendEmployeeCommonAccount: "suspendEmployeeCommonAccount",
         reactivateEmployeeCommonAccount: "reactivateEmployeeCommonAccount",
+        createWorkplaceSharedAccount: "createWorkplaceSharedAccount",
+        resetWorkplaceSharedAccountPassword: "resetWorkplaceSharedAccountPassword",
+        suspendWorkplaceSharedAccount: "suspendWorkplaceSharedAccount",
+        reactivateWorkplaceSharedAccount: "reactivateWorkplaceSharedAccount",
+        revokeWorkplaceSharedAccountDevice: "revokeWorkplaceSharedAccountDevice",
         resetEmployeeAccountPassword: "resetEmployeeAccountPassword",
         loginCommonAccount: "loginCommonAccount",
         changeCommonAccountPassword: "changeCommonAccountPassword",
@@ -4201,6 +4473,8 @@
         employeeAccountRows: [],
         administratorAccounts: [],
         orphanAccounts: [],
+        sharedAccountRows: [],
+        sharedWorkplaces: [],
         summary: {},
         integrityCheck: {},
         selectedAccountId: "",
@@ -4222,6 +4496,24 @@
         status: "idle",
         action: "",
         employeeId: "",
+        message: "",
+        lastError: "",
+      },
+      sharedAccountIssue: {
+        status: "idle",
+        message: "",
+        lastError: "",
+      },
+      sharedAccountOperation: {
+        status: "idle",
+        action: "",
+        accountId: "",
+        message: "",
+        lastError: "",
+      },
+      sharedAccountDevices: {
+        status: "idle",
+        accountId: "",
         message: "",
         lastError: "",
       },
@@ -4284,6 +4576,7 @@
     const cancelAccountAdminModalButton = document.getElementById("cancelAccountAdminModalButton");
     const accountManagementTabs = document.getElementById("accountManagementTabs");
     const commonAccountsTabButton = document.getElementById("commonAccountsTabButton");
+    const sharedAccountsTabButton = document.getElementById("sharedAccountsTabButton");
     const administratorAccountsTabButton = document.getElementById("administratorAccountsTabButton");
     const commonAccountPanel = document.getElementById("commonAccountPanel");
     const commonAccountStatusChip = document.getElementById("commonAccountStatusChip");
@@ -4300,6 +4593,52 @@
     const commonAccountMobileList = document.getElementById("commonAccountMobileList");
     const commonAccountEmpty = document.getElementById("commonAccountEmpty");
     const commonAccountMessage = document.getElementById("commonAccountMessage");
+    const sharedAccountPanel = document.getElementById("sharedAccountPanel");
+    const sharedAccountStatusChip = document.getElementById("sharedAccountStatusChip");
+    const sharedAccountSummary = document.getElementById("sharedAccountSummary");
+    const sharedAccountResultCount = document.getElementById("sharedAccountResultCount");
+    const sharedAccountIssueButton = document.getElementById("sharedAccountIssueButton");
+    const sharedAccountReloadButton = document.getElementById("sharedAccountReloadButton");
+    const sharedAccountTableBody = document.getElementById("sharedAccountTableBody");
+    const sharedAccountMobileList = document.getElementById("sharedAccountMobileList");
+    const sharedAccountEmpty = document.getElementById("sharedAccountEmpty");
+    const sharedAccountMessage = document.getElementById("sharedAccountMessage");
+    const sharedAccountIssueModalBackdrop = document.getElementById("sharedAccountIssueModalBackdrop");
+    const sharedAccountIssueWorkplaceSelect = document.getElementById("sharedAccountIssueWorkplaceSelect");
+    const sharedAccountIssueAccountNameInput = document.getElementById("sharedAccountIssueAccountNameInput");
+    const sharedAccountIssueLoginIdInput = document.getElementById("sharedAccountIssueLoginIdInput");
+    const sharedAccountIssueAdministratorPasswordInput = document.getElementById("sharedAccountIssueAdministratorPasswordInput");
+    const sharedAccountIssuePasswordInput = document.getElementById("sharedAccountIssuePasswordInput");
+    const sharedAccountIssuePasswordConfirmInput = document.getElementById("sharedAccountIssuePasswordConfirmInput");
+    const sharedAccountIssueMessage = document.getElementById("sharedAccountIssueMessage");
+    const sharedAccountIssueSubmitButton = document.getElementById("sharedAccountIssueSubmitButton");
+    const sharedAccountIssueClearButton = document.getElementById("sharedAccountIssueClearButton");
+    const closeSharedAccountIssueModalButton = document.getElementById("closeSharedAccountIssueModalButton");
+    const cancelSharedAccountIssueModalButton = document.getElementById("cancelSharedAccountIssueModalButton");
+    const sharedAccountOperationModalBackdrop = document.getElementById("sharedAccountOperationModalBackdrop");
+    const sharedAccountOperationModalTitle = document.getElementById("sharedAccountOperationModalTitle");
+    const sharedAccountOperationModalSubtitle = document.getElementById("sharedAccountOperationModalSubtitle");
+    const sharedAccountOperationIcon = document.getElementById("sharedAccountOperationIcon");
+    const sharedAccountOperationTargetSummary = document.getElementById("sharedAccountOperationTargetSummary");
+    const sharedAccountOperationAdministratorPasswordInput = document.getElementById("sharedAccountOperationAdministratorPasswordInput");
+    const sharedAccountOperationPasswordFields = document.getElementById("sharedAccountOperationPasswordFields");
+    const sharedAccountOperationPasswordInput = document.getElementById("sharedAccountOperationPasswordInput");
+    const sharedAccountOperationPasswordConfirmInput = document.getElementById("sharedAccountOperationPasswordConfirmInput");
+    const sharedAccountOperationNote = document.getElementById("sharedAccountOperationNote");
+    const sharedAccountOperationMessage = document.getElementById("sharedAccountOperationMessage");
+    const sharedAccountOperationSubmitButton = document.getElementById("sharedAccountOperationSubmitButton");
+    const sharedAccountOperationClearButton = document.getElementById("sharedAccountOperationClearButton");
+    const closeSharedAccountOperationModalButton = document.getElementById("closeSharedAccountOperationModalButton");
+    const cancelSharedAccountOperationModalButton = document.getElementById("cancelSharedAccountOperationModalButton");
+    const sharedAccountDeviceModalBackdrop = document.getElementById("sharedAccountDeviceModalBackdrop");
+    const sharedAccountDeviceModalSubtitle = document.getElementById("sharedAccountDeviceModalSubtitle");
+    const sharedAccountDeviceTargetSummary = document.getElementById("sharedAccountDeviceTargetSummary");
+    const sharedAccountDeviceAdministratorPasswordInput = document.getElementById("sharedAccountDeviceAdministratorPasswordInput");
+    const sharedAccountDeviceList = document.getElementById("sharedAccountDeviceList");
+    const sharedAccountDeviceEmpty = document.getElementById("sharedAccountDeviceEmpty");
+    const sharedAccountDeviceMessage = document.getElementById("sharedAccountDeviceMessage");
+    const closeSharedAccountDeviceModalButton = document.getElementById("closeSharedAccountDeviceModalButton");
+    const cancelSharedAccountDeviceModalButton = document.getElementById("cancelSharedAccountDeviceModalButton");
     const commonAccountIssueModalBackdrop = document.getElementById("commonAccountIssueModalBackdrop");
     const commonAccountIssueTargetSummary = document.getElementById("commonAccountIssueTargetSummary");
     const commonAccountIssueLoginIdInput = document.getElementById("commonAccountIssueLoginIdInput");
@@ -5430,7 +5769,7 @@
     }
 
     function closeMasterModalsForAuthLock() {
-      [accountAdminModalBackdrop, detailModalBackdrop, editModalBackdrop, disableModalBackdrop, retirementDesignModalBackdrop]
+      [accountAdminModalBackdrop, sharedAccountIssueModalBackdrop, sharedAccountOperationModalBackdrop, sharedAccountDeviceModalBackdrop, detailModalBackdrop, editModalBackdrop, disableModalBackdrop, retirementDesignModalBackdrop]
         .filter(Boolean)
         .forEach((modal) => modal.classList.remove("is-open"));
 
@@ -5774,9 +6113,13 @@
       accountAdminModalBackdrop.classList.remove("is-open");
       commonAccountIssueModalBackdrop?.classList.remove("is-open");
       commonAccountOperationModalBackdrop?.classList.remove("is-open");
+      sharedAccountIssueModalBackdrop?.classList.remove("is-open");
+      sharedAccountOperationModalBackdrop?.classList.remove("is-open");
+      sharedAccountDeviceModalBackdrop?.classList.remove("is-open");
       clearAccountManagementInputs();
       resetCommonAccountIssueState();
       resetCommonAccountOperationState();
+      resetSharedAccountUiState();
       document.body.style.overflow = "";
       headerAdminMenuButton?.focus();
     }
@@ -5788,6 +6131,8 @@
         employeeAccountRows: [],
         administratorAccounts: [],
         orphanAccounts: [],
+        sharedAccountRows: [],
+        sharedWorkplaces: [],
         summary: {},
         integrityCheck: {},
         selectedAccountId: "",
@@ -5805,8 +6150,12 @@
       if (commonAccountOperationModalBackdrop?.classList.contains("is-open")) {
         commonAccountOperationModalBackdrop.classList.remove("is-open");
       }
+      [sharedAccountIssueModalBackdrop, sharedAccountOperationModalBackdrop, sharedAccountDeviceModalBackdrop]
+        .filter(Boolean)
+        .forEach((modal) => modal.classList.remove("is-open"));
       resetCommonAccountIssueState();
       resetCommonAccountOperationState();
+      resetSharedAccountUiState();
     }
 
     function resetCommonAccountIssueState(message = "") {
@@ -6324,6 +6673,17 @@
       if (accountAdminCurrentPasswordInput) accountAdminCurrentPasswordInput.value = "";
       if (accountAdminTemporaryPasswordInput) accountAdminTemporaryPasswordInput.value = "";
       if (accountAdminTemporaryPasswordConfirmInput) accountAdminTemporaryPasswordConfirmInput.value = "";
+      [
+        sharedAccountIssueAdministratorPasswordInput,
+        sharedAccountIssuePasswordInput,
+        sharedAccountIssuePasswordConfirmInput,
+        sharedAccountOperationAdministratorPasswordInput,
+        sharedAccountOperationPasswordInput,
+        sharedAccountOperationPasswordConfirmInput,
+        sharedAccountDeviceAdministratorPasswordInput,
+      ].filter(Boolean).forEach((input) => {
+        input.value = "";
+      });
     }
 
     function getCommonAccountStatusMeta(status) {
@@ -6599,13 +6959,912 @@
       }
     }
 
+
+    function resetSharedAccountUiState() {
+      state.sharedAccountIssue = {
+        status: "idle",
+        message: "",
+        lastError: "",
+      };
+      state.sharedAccountOperation = {
+        status: "idle",
+        action: "",
+        accountId: "",
+        message: "",
+        lastError: "",
+      };
+      state.sharedAccountDevices = {
+        status: "idle",
+        accountId: "",
+        message: "",
+        lastError: "",
+      };
+      [
+        sharedAccountIssueAdministratorPasswordInput,
+        sharedAccountIssuePasswordInput,
+        sharedAccountIssuePasswordConfirmInput,
+        sharedAccountOperationAdministratorPasswordInput,
+        sharedAccountOperationPasswordInput,
+        sharedAccountOperationPasswordConfirmInput,
+        sharedAccountDeviceAdministratorPasswordInput,
+      ].filter(Boolean).forEach((input) => {
+        input.value = "";
+      });
+    }
+
+    function getSharedAccountRows() {
+      return Array.isArray(state.accountManagement?.sharedAccountRows)
+        ? state.accountManagement.sharedAccountRows
+        : [];
+    }
+
+    function getSharedWorkplaces() {
+      return Array.isArray(state.accountManagement?.sharedWorkplaces)
+        ? state.accountManagement.sharedWorkplaces
+        : [];
+    }
+
+    function getSharedAccountRow(accountId) {
+      const cleanAccountId = toText(accountId).trim();
+      return getSharedAccountRows().find(
+        (row) => toText(row.account_id).trim() === cleanAccountId
+      ) || null;
+    }
+
+    function getSharedAccountStatusMeta(status) {
+      const map = {
+        active: { label: "利用中", badgeClass: "active", icon: "circle-check" },
+        suspended: { label: "停止中", badgeClass: "inactive", icon: "circle-pause" },
+        attention: { label: "要対応", badgeClass: "left", icon: "triangle-alert" },
+      };
+      return map[status] || {
+        label: status || "未判定",
+        badgeClass: "inactive",
+        icon: "circle-help",
+      };
+    }
+
+    function buildSharedAccountActionButtons(row) {
+      const actions = row?.actions || {};
+      return [
+        actions.can_view_devices
+          ? `<button class="button ghost" type="button" data-shared-account-action="devices" data-account-id="${escapeHtml(row.account_id)}"><i data-lucide="monitor-smartphone"></i>端末</button>`
+          : "",
+        actions.can_reset_password
+          ? `<button class="button" type="button" data-shared-account-action="reset" data-account-id="${escapeHtml(row.account_id)}"><i data-lucide="key-round"></i>PW再設定</button>`
+          : "",
+        actions.can_suspend
+          ? `<button class="button danger" type="button" data-shared-account-action="suspend" data-account-id="${escapeHtml(row.account_id)}"><i data-lucide="circle-pause"></i>停止</button>`
+          : "",
+        actions.can_reactivate
+          ? `<button class="button primary" type="button" data-shared-account-action="reactivate" data-account-id="${escapeHtml(row.account_id)}"><i data-lucide="circle-play"></i>再開</button>`
+          : "",
+      ].filter(Boolean).join("");
+    }
+
+    function renderSharedAccountPanel() {
+      const management = state.accountManagement || {};
+      const rows = getSharedAccountRows();
+      const workplaces = getSharedWorkplaces();
+      const loading = management.status === "loading";
+      const stale = management.status === "stale";
+
+      const summaryItems = [
+        ["店舗", workplaces.length, "store"],
+        ["発行済み", rows.length, "badge-check"],
+        ["利用中", rows.filter((row) => row.management_status === "active").length, "circle-check"],
+        ["停止中", rows.filter((row) => row.management_status === "suspended").length, "circle-pause"],
+        ["有効端末", rows.reduce((sum, row) => sum + Number(row.active_device_count || 0), 0), "monitor-smartphone"],
+        ["要対応", rows.filter((row) => row.management_status === "attention").length, "triangle-alert"],
+      ];
+
+      if (sharedAccountSummary) {
+        sharedAccountSummary.innerHTML = summaryItems.map(([label, value, icon]) =>
+          `<div class="common-account-summary-button" style="cursor:default">
+            <span><i data-lucide="${icon}"></i>${escapeHtml(label)}</span>
+            <strong>${escapeHtml(value)}</strong>
+          </div>`
+        ).join("");
+      }
+
+      if (sharedAccountResultCount) {
+        sharedAccountResultCount.textContent = `${rows.length}件`;
+      }
+
+      if (sharedAccountTableBody) {
+        sharedAccountTableBody.innerHTML = rows.map((row) => {
+          const status = getSharedAccountStatusMeta(row.management_status);
+          const workplaceLabel = row.workplace_name || row.shared_scope_code || "店舗未確認";
+          return `
+            <tr>
+              <td>
+                <span class="common-account-person-name">${escapeHtml(workplaceLabel)}</span>
+                <span class="common-account-cell-sub">${escapeHtml(row.shared_scope_code || "—")}</span>
+              </td>
+              <td>
+                <span class="common-account-person-name">${escapeHtml(row.account_name || row.login_id || "—")}</span>
+                <span class="common-account-cell-sub">${escapeHtml(row.login_id || "—")} / ${escapeHtml(row.account_id || "—")}</span>
+              </td>
+              <td>
+                <span class="employee-status-badge ${status.badgeClass}">
+                  <i data-lucide="${status.icon}"></i>${escapeHtml(status.label)}
+                </span>
+                ${row.workplace_status !== "active"
+                  ? '<span class="common-account-cell-sub">店舗マスタ要確認</span>'
+                  : ""}
+              </td>
+              <td>
+                <strong>${escapeHtml(row.active_device_count || 0)}台</strong>
+                <span class="common-account-cell-sub">全履歴 ${escapeHtml(row.total_device_count || 0)}台</span>
+              </td>
+              <td>${escapeHtml(row.updated_at || "—")}</td>
+              <td><div class="common-account-actions">${buildSharedAccountActionButtons(row)}</div></td>
+            </tr>`;
+        }).join("");
+      }
+
+      if (sharedAccountMobileList) {
+        sharedAccountMobileList.innerHTML = rows.map((row) => {
+          const status = getSharedAccountStatusMeta(row.management_status);
+          return `
+            <article class="common-account-card">
+              <div class="common-account-card-head">
+                <div>
+                  <span class="common-account-person-name">${escapeHtml(row.workplace_name || row.shared_scope_code || "店舗未確認")}</span>
+                  <span class="common-account-person-sub">${escapeHtml(row.account_name || row.login_id || "—")}</span>
+                </div>
+                <span class="employee-status-badge ${status.badgeClass}">
+                  <i data-lucide="${status.icon}"></i>${escapeHtml(status.label)}
+                </span>
+              </div>
+              <div class="common-account-card-grid">
+                <div class="common-account-card-item">
+                  <span>ログインID</span><strong>${escapeHtml(row.login_id || "—")}</strong>
+                </div>
+                <div class="common-account-card-item">
+                  <span>有効端末</span><strong>${escapeHtml(row.active_device_count || 0)}台</strong>
+                </div>
+                <div class="common-account-card-item">
+                  <span>account_id</span><strong>${escapeHtml(row.account_id || "—")}</strong>
+                </div>
+                <div class="common-account-card-item">
+                  <span>更新日時</span><strong>${escapeHtml(row.updated_at || "—")}</strong>
+                </div>
+              </div>
+              <div class="common-account-actions">${buildSharedAccountActionButtons(row)}</div>
+            </article>`;
+        }).join("");
+      }
+
+      if (sharedAccountEmpty) {
+        sharedAccountEmpty.classList.toggle("is-visible", !rows.length && !loading);
+      }
+
+      if (sharedAccountStatusChip) {
+        sharedAccountStatusChip.className = `status-chip ${
+          management.status === "error" || stale
+            ? "warning"
+            : rows.length
+              ? "sample"
+              : "offline"
+        }`;
+        sharedAccountStatusChip.innerHTML = loading
+          ? '<i data-lucide="loader-2"></i>読込中'
+          : stale
+            ? '<i data-lucide="history"></i>前回表示'
+            : `<i data-lucide="store"></i>${rows.length}店舗`;
+      }
+
+      if (sharedAccountMessage) {
+        sharedAccountMessage.textContent =
+          management.message || "店舗共有アカウント情報を確認できます。";
+      }
+
+      if (sharedAccountIssueButton) {
+        sharedAccountIssueButton.disabled =
+          loading || !workplaces.some((workplace) => !workplace.has_shared_account);
+      }
+
+      if (sharedAccountReloadButton) {
+        sharedAccountReloadButton.disabled = loading || !APP_CONFIG.gasConnected;
+      }
+    }
+
+    function openSharedAccountIssueModal() {
+      const availableWorkplaces = getSharedWorkplaces()
+        .filter((workplace) => !workplace.has_shared_account);
+
+      if (!availableWorkplaces.length) {
+        showToast("共有アカウントを未発行の店舗がありません。");
+        return;
+      }
+
+      state.sharedAccountIssue = {
+        status: "idle",
+        message: "店舗と入力内容を確認して発行してください。",
+        lastError: "",
+      };
+
+      if (sharedAccountIssueWorkplaceSelect) {
+        sharedAccountIssueWorkplaceSelect.innerHTML =
+          '<option value="">店舗を選択</option>' +
+          availableWorkplaces.map((workplace) =>
+            `<option value="${escapeHtml(workplace.workplace_code)}">${escapeHtml(workplace.workplace_name || workplace.workplace_code)}</option>`
+          ).join("");
+        sharedAccountIssueWorkplaceSelect.value = "";
+      }
+
+      [
+        sharedAccountIssueAccountNameInput,
+        sharedAccountIssueLoginIdInput,
+        sharedAccountIssueAdministratorPasswordInput,
+        sharedAccountIssuePasswordInput,
+        sharedAccountIssuePasswordConfirmInput,
+      ].filter(Boolean).forEach((input) => {
+        input.value = "";
+      });
+
+      sharedAccountIssueModalBackdrop?.classList.add("is-open");
+      document.body.style.overflow = "hidden";
+      renderSharedAccountIssueModal();
+      refreshIcons();
+      window.setTimeout(() => sharedAccountIssueWorkplaceSelect?.focus(), 0);
+    }
+
+    function closeSharedAccountIssueModal() {
+      sharedAccountIssueModalBackdrop?.classList.remove("is-open");
+      state.sharedAccountIssue = {
+        status: "idle",
+        message: "",
+        lastError: "",
+      };
+      document.body.style.overflow =
+        accountAdminModalBackdrop?.classList.contains("is-open") ? "hidden" : "";
+      sharedAccountIssueButton?.focus();
+    }
+
+    function renderSharedAccountIssueModal() {
+      const busy = state.sharedAccountIssue?.status === "submitting";
+      [
+        sharedAccountIssueWorkplaceSelect,
+        sharedAccountIssueAccountNameInput,
+        sharedAccountIssueLoginIdInput,
+        sharedAccountIssueAdministratorPasswordInput,
+        sharedAccountIssuePasswordInput,
+        sharedAccountIssuePasswordConfirmInput,
+        sharedAccountIssueClearButton,
+        cancelSharedAccountIssueModalButton,
+      ].filter(Boolean).forEach((element) => {
+        element.disabled = busy;
+      });
+
+      if (sharedAccountIssueSubmitButton) {
+        sharedAccountIssueSubmitButton.disabled = busy || !APP_CONFIG.gasConnected;
+        sharedAccountIssueSubmitButton.innerHTML = busy
+          ? '<i data-lucide="loader-2"></i>発行中'
+          : '<i data-lucide="store"></i>店舗アカウントを発行';
+      }
+
+      if (sharedAccountIssueMessage) {
+        sharedAccountIssueMessage.textContent =
+          state.sharedAccountIssue?.message ||
+          "店舗と入力内容を確認して発行してください。";
+      }
+    }
+
+    function applySharedWorkplaceDefaults() {
+      const workplaceCode = toText(sharedAccountIssueWorkplaceSelect?.value).trim();
+      const workplace = getSharedWorkplaces().find(
+        (item) => toText(item.workplace_code).trim() === workplaceCode
+      );
+      if (!workplace) return;
+
+      if (
+        sharedAccountIssueAccountNameInput &&
+        !toText(sharedAccountIssueAccountNameInput.value).trim()
+      ) {
+        sharedAccountIssueAccountNameInput.value =
+          `${workplace.workplace_name || workplace.workplace_code}共有`;
+      }
+
+      if (
+        sharedAccountIssueLoginIdInput &&
+        !toText(sharedAccountIssueLoginIdInput.value).trim()
+      ) {
+        sharedAccountIssueLoginIdInput.value = `shared_${workplaceCode}`;
+      }
+    }
+
+    function buildSharedAccountIssueBlockers() {
+      const workplaceCode = toText(sharedAccountIssueWorkplaceSelect?.value).trim();
+      const accountName = toText(sharedAccountIssueAccountNameInput?.value).trim();
+      const loginId = toText(sharedAccountIssueLoginIdInput?.value).trim();
+      const administratorPassword = toText(
+        sharedAccountIssueAdministratorPasswordInput?.value
+      );
+      const password = toText(sharedAccountIssuePasswordInput?.value);
+      const passwordConfirm = toText(
+        sharedAccountIssuePasswordConfirmInput?.value
+      );
+      const blockers = [];
+
+      if (!workplaceCode) blockers.push("店舗を選択してください。");
+      if (!accountName) blockers.push("アカウント名を入力してください。");
+      if (!loginId) blockers.push("共有ログインIDを入力してください。");
+      if (!administratorPassword) {
+        blockers.push("管理者自身の現在のパスワードを入力してください。");
+      }
+      if (!password) blockers.push("初期パスワードを入力してください。");
+      if (!passwordConfirm) {
+        blockers.push("初期パスワード（確認）を入力してください。");
+      }
+      if (password && (password.length < 8 || password.length > 64)) {
+        blockers.push("初期パスワードは8文字以上64文字以下で入力してください。");
+      }
+      if (password && passwordConfirm && password !== passwordConfirm) {
+        blockers.push("初期パスワードと確認入力が一致しません。");
+      }
+      return blockers;
+    }
+
+    async function handleSharedAccountIssueSubmit() {
+      const blockers = buildSharedAccountIssueBlockers();
+      if (blockers.length) {
+        state.sharedAccountIssue = {
+          ...state.sharedAccountIssue,
+          status: "error",
+          message: blockers.join(" "),
+          lastError: blockers.join(" / "),
+        };
+        renderSharedAccountIssueModal();
+        showToast(blockers[0]);
+        return;
+      }
+
+      const workplaceCode = toText(
+        sharedAccountIssueWorkplaceSelect.value
+      ).trim();
+      const workplace = getSharedWorkplaces().find(
+        (item) => toText(item.workplace_code).trim() === workplaceCode
+      );
+      const accountName = toText(
+        sharedAccountIssueAccountNameInput.value
+      ).trim();
+      const loginId = toText(sharedAccountIssueLoginIdInput.value).trim();
+
+      const confirmed = window.confirm(
+        `${workplace?.workplace_name || workplaceCode}の共有アカウント「${accountName}」を発行します。\n\n` +
+        `ログインID: ${loginId}\n` +
+        "発行後、このパスワードで店舗端末を初回設定します。よろしいですか？"
+      );
+      if (!confirmed) return;
+
+      state.sharedAccountIssue = {
+        ...state.sharedAccountIssue,
+        status: "submitting",
+        message: "店舗共有アカウントを発行しています。",
+        lastError: "",
+      };
+      renderSharedAccountIssueModal();
+      refreshIcons();
+
+      try {
+        const result = await callEmployeeApi(
+          APP_CONFIG.apiActions.createWorkplaceSharedAccount,
+          {
+            auth: buildCurrentAuthPayload(),
+            workplace_code: workplaceCode,
+            account_name: accountName,
+            login_id: loginId,
+            administrator_password:
+              sharedAccountIssueAdministratorPasswordInput.value,
+            shared_password: sharedAccountIssuePasswordInput.value,
+            shared_password_confirm:
+              sharedAccountIssuePasswordConfirmInput.value,
+          }
+        );
+
+        const message =
+          result.message || "店舗共有アカウントを発行しました。";
+        closeSharedAccountIssueModal();
+        await loadAccountManagementData({ silent: true, force: true });
+        state.accountManagement.activeView = "shared";
+        renderAccountManagementPanel();
+        refreshIcons();
+        showToast(message);
+      } catch (error) {
+        if (isDiscardedAuthContextError(error)) return;
+        const result = error.apiResult || {};
+        const serverBlockers =
+          result?.data?.safetyCheck?.blockers ||
+          result?.data?.authorization?.blockers ||
+          result?.data?.idempotency?.blockers ||
+          [];
+        const message =
+          result.message ||
+          error.message ||
+          "店舗共有アカウント発行に失敗しました。";
+        state.sharedAccountIssue = {
+          ...state.sharedAccountIssue,
+          status: "error",
+          message,
+          lastError: Array.isArray(serverBlockers)
+            ? serverBlockers.join(" / ")
+            : message,
+        };
+        renderSharedAccountIssueModal();
+        showToast(message);
+      } finally {
+        renderSharedAccountIssueModal();
+        renderAccountManagementPanel();
+        refreshIcons();
+      }
+    }
+
+    function getSharedAccountOperationMeta(action) {
+      const map = {
+        reset: {
+          title: "共有パスワード再設定",
+          subtitle: "既存端末認証を失効し、新しいパスワードを設定します",
+          icon: "key-round",
+          note: "パスワード再設定後、登録済み端末はすべて失効します。店舗端末では新しいパスワードで再ログインしてください。",
+          button: "パスワードを再設定",
+          danger: false,
+        },
+        suspend: {
+          title: "店舗共有アカウント停止",
+          subtitle: "ポータル利用を停止します",
+          icon: "circle-pause",
+          note: "アカウントを停止し、登録済み端末認証も失効します。",
+          button: "停止する",
+          danger: true,
+        },
+        reactivate: {
+          title: "店舗共有アカウント再開",
+          subtitle: "店舗マスタを確認して利用を再開します",
+          icon: "circle-play",
+          note: "停止時に失効した端末認証は復活しません。店舗端末で再ログインが必要です。",
+          button: "再開する",
+          danger: false,
+        },
+      };
+      return map[action] || null;
+    }
+
+    function openSharedAccountOperationModal(action, row) {
+      const meta = getSharedAccountOperationMeta(action);
+      if (!meta || !row) return;
+
+      state.sharedAccountOperation = {
+        status: "idle",
+        action,
+        accountId: toText(row.account_id).trim(),
+        message: "対象と操作内容を確認してください。",
+        lastError: "",
+      };
+
+      [
+        sharedAccountOperationAdministratorPasswordInput,
+        sharedAccountOperationPasswordInput,
+        sharedAccountOperationPasswordConfirmInput,
+      ].filter(Boolean).forEach((input) => {
+        input.value = "";
+      });
+
+      sharedAccountOperationModalBackdrop?.classList.add("is-open");
+      document.body.style.overflow = "hidden";
+      renderSharedAccountOperationModal();
+      refreshIcons();
+      window.setTimeout(
+        () => sharedAccountOperationAdministratorPasswordInput?.focus(),
+        0
+      );
+    }
+
+    function closeSharedAccountOperationModal() {
+      sharedAccountOperationModalBackdrop?.classList.remove("is-open");
+      state.sharedAccountOperation = {
+        status: "idle",
+        action: "",
+        accountId: "",
+        message: "",
+        lastError: "",
+      };
+      document.body.style.overflow =
+        accountAdminModalBackdrop?.classList.contains("is-open") ? "hidden" : "";
+    }
+
+    function renderSharedAccountOperationModal() {
+      const operation = state.sharedAccountOperation || {};
+      const row = getSharedAccountRow(operation.accountId);
+      const meta = getSharedAccountOperationMeta(operation.action) || {};
+      const busy = operation.status === "submitting";
+
+      if (sharedAccountOperationModalTitle) {
+        sharedAccountOperationModalTitle.textContent =
+          meta.title || "店舗共有アカウント操作";
+      }
+      if (sharedAccountOperationModalSubtitle) {
+        sharedAccountOperationModalSubtitle.textContent =
+          meta.subtitle || "対象と操作内容を確認します";
+      }
+      if (sharedAccountOperationIcon) {
+        sharedAccountOperationIcon.innerHTML =
+          `<i data-lucide="${meta.icon || "settings-2"}"></i>`;
+      }
+      if (sharedAccountOperationTargetSummary) {
+        sharedAccountOperationTargetSummary.innerHTML = row
+          ? [
+              ["店舗", row.workplace_name || row.shared_scope_code || "—"],
+              ["アカウント名", row.account_name || "—"],
+              ["ログインID", row.login_id || "—"],
+              ["account_id", row.account_id || "—"],
+            ].map(([label, value]) =>
+              `<div class="common-account-issue-summary-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`
+            ).join("")
+          : "";
+      }
+      if (sharedAccountOperationPasswordFields) {
+        sharedAccountOperationPasswordFields.hidden =
+          operation.action !== "reset";
+      }
+      if (sharedAccountOperationNote) {
+        sharedAccountOperationNote.textContent = meta.note || "";
+      }
+
+      [
+        sharedAccountOperationAdministratorPasswordInput,
+        sharedAccountOperationPasswordInput,
+        sharedAccountOperationPasswordConfirmInput,
+        sharedAccountOperationClearButton,
+        cancelSharedAccountOperationModalButton,
+      ].filter(Boolean).forEach((element) => {
+        element.disabled = busy || !row;
+      });
+
+      if (sharedAccountOperationSubmitButton) {
+        sharedAccountOperationSubmitButton.disabled =
+          busy || !row || !APP_CONFIG.gasConnected;
+        sharedAccountOperationSubmitButton.className =
+          `button ${meta.danger ? "danger" : "primary"}`;
+        sharedAccountOperationSubmitButton.innerHTML = busy
+          ? '<i data-lucide="loader-2"></i>処理中'
+          : `<i data-lucide="${meta.icon || "circle-check"}"></i>${escapeHtml(meta.button || "実行")}`;
+      }
+
+      if (sharedAccountOperationMessage) {
+        sharedAccountOperationMessage.textContent =
+          operation.message || "対象と操作内容を確認してください。";
+      }
+    }
+
+    async function handleSharedAccountOperationSubmit() {
+      const operation = state.sharedAccountOperation || {};
+      const row = getSharedAccountRow(operation.accountId);
+      if (!row) {
+        showToast("対象共有アカウントを確認できません。");
+        return;
+      }
+
+      const administratorPassword = toText(
+        sharedAccountOperationAdministratorPasswordInput?.value
+      );
+      const password = toText(sharedAccountOperationPasswordInput?.value);
+      const passwordConfirm = toText(
+        sharedAccountOperationPasswordConfirmInput?.value
+      );
+      const blockers = [];
+
+      if (!administratorPassword) {
+        blockers.push("管理者自身の現在のパスワードを入力してください。");
+      }
+      if (operation.action === "reset") {
+        if (!password) {
+          blockers.push("新しい共有パスワードを入力してください。");
+        }
+        if (!passwordConfirm) {
+          blockers.push("新しい共有パスワード（確認）を入力してください。");
+        }
+        if (password && (password.length < 8 || password.length > 64)) {
+          blockers.push(
+            "新しい共有パスワードは8文字以上64文字以下で入力してください。"
+          );
+        }
+        if (password && passwordConfirm && password !== passwordConfirm) {
+          blockers.push(
+            "新しい共有パスワードと確認入力が一致しません。"
+          );
+        }
+      }
+
+      if (blockers.length) {
+        state.sharedAccountOperation = {
+          ...operation,
+          status: "error",
+          message: blockers.join(" "),
+          lastError: blockers.join(" / "),
+        };
+        renderSharedAccountOperationModal();
+        showToast(blockers[0]);
+        return;
+      }
+
+      const confirmMessages = {
+        reset:
+          `${row.workplace_name || row.shared_scope_code}の共有パスワードを再設定します。\n\n` +
+          "登録済み端末はすべて失効します。よろしいですか？",
+        suspend:
+          `${row.workplace_name || row.shared_scope_code}の共有アカウントを停止します。\n\n` +
+          "登録済み端末も失効します。よろしいですか？",
+        reactivate:
+          `${row.workplace_name || row.shared_scope_code}の共有アカウントを再開します。\n\n` +
+          "旧端末認証は復活しないため再ログインが必要です。よろしいですか？",
+      };
+      if (!window.confirm(confirmMessages[operation.action] || "実行しますか？")) {
+        return;
+      }
+
+      const actionMap = {
+        reset: APP_CONFIG.apiActions.resetWorkplaceSharedAccountPassword,
+        suspend: APP_CONFIG.apiActions.suspendWorkplaceSharedAccount,
+        reactivate: APP_CONFIG.apiActions.reactivateWorkplaceSharedAccount,
+      };
+
+      state.sharedAccountOperation = {
+        ...operation,
+        status: "submitting",
+        message: "処理しています。",
+        lastError: "",
+      };
+      renderSharedAccountOperationModal();
+      refreshIcons();
+
+      try {
+        const result = await callEmployeeApi(actionMap[operation.action], {
+          auth: buildCurrentAuthPayload(),
+          target_account_id: row.account_id,
+          target_login_id: row.login_id,
+          workplace_code: row.shared_scope_code,
+          administrator_password: administratorPassword,
+          shared_password: password,
+          shared_password_confirm: passwordConfirm,
+        });
+
+        const message =
+          result.message || "店舗共有アカウントを更新しました。";
+        closeSharedAccountOperationModal();
+        await loadAccountManagementData({ silent: true, force: true });
+        state.accountManagement.activeView = "shared";
+        renderAccountManagementPanel();
+        refreshIcons();
+        showToast(message);
+      } catch (error) {
+        if (isDiscardedAuthContextError(error)) return;
+        const result = error.apiResult || {};
+        const message =
+          result.message ||
+          error.message ||
+          "店舗共有アカウント操作に失敗しました。";
+        state.sharedAccountOperation = {
+          ...operation,
+          status: "error",
+          message,
+          lastError: message,
+        };
+        renderSharedAccountOperationModal();
+        showToast(message);
+      } finally {
+        renderSharedAccountOperationModal();
+        renderAccountManagementPanel();
+        refreshIcons();
+      }
+    }
+
+    function openSharedAccountDeviceModal(row) {
+      if (!row) return;
+      state.sharedAccountDevices = {
+        status: "idle",
+        accountId: toText(row.account_id).trim(),
+        message: "有効な端末だけ個別に失効できます。",
+        lastError: "",
+      };
+      if (sharedAccountDeviceAdministratorPasswordInput) {
+        sharedAccountDeviceAdministratorPasswordInput.value = "";
+      }
+      sharedAccountDeviceModalBackdrop?.classList.add("is-open");
+      document.body.style.overflow = "hidden";
+      renderSharedAccountDeviceModal();
+      refreshIcons();
+    }
+
+    function closeSharedAccountDeviceModal() {
+      sharedAccountDeviceModalBackdrop?.classList.remove("is-open");
+      state.sharedAccountDevices = {
+        status: "idle",
+        accountId: "",
+        message: "",
+        lastError: "",
+      };
+      if (sharedAccountDeviceAdministratorPasswordInput) {
+        sharedAccountDeviceAdministratorPasswordInput.value = "";
+      }
+      document.body.style.overflow =
+        accountAdminModalBackdrop?.classList.contains("is-open") ? "hidden" : "";
+    }
+
+    function renderSharedAccountDeviceModal() {
+      const deviceState = state.sharedAccountDevices || {};
+      const row = getSharedAccountRow(deviceState.accountId);
+      const devices = Array.isArray(row?.devices) ? row.devices : [];
+      const busy = deviceState.status === "submitting";
+
+      if (sharedAccountDeviceModalSubtitle) {
+        sharedAccountDeviceModalSubtitle.textContent = row
+          ? `${row.workplace_name || row.shared_scope_code} / ${row.account_name || row.login_id}`
+          : "店舗共有アカウントに登録された端末認証を確認します";
+      }
+
+      if (sharedAccountDeviceTargetSummary) {
+        sharedAccountDeviceTargetSummary.innerHTML = row
+          ? [
+              ["店舗", row.workplace_name || row.shared_scope_code || "—"],
+              ["ログインID", row.login_id || "—"],
+              ["有効端末", `${row.active_device_count || 0}台`],
+              ["全履歴", `${row.total_device_count || 0}台`],
+            ].map(([label, value]) =>
+              `<div class="common-account-issue-summary-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`
+            ).join("")
+          : "";
+      }
+
+      if (sharedAccountDeviceList) {
+        sharedAccountDeviceList.innerHTML = devices.map((device) =>
+          `<article class="shared-device-card">
+            <div class="shared-device-card-head">
+              <div>
+                <span class="common-account-person-name">${escapeHtml(device.device_id || "端末ID不明")}</span>
+                <span class="common-account-person-sub">${escapeHtml(device.platform || device.display_mode || "端末情報なし")}</span>
+              </div>
+              <span class="employee-status-badge ${device.status === "active" ? "active" : "inactive"}">
+                ${device.status === "active" ? "有効" : "失効済み"}
+              </span>
+            </div>
+            <div class="shared-device-card-meta">
+              <div><span>登録日時</span><strong>${escapeHtml(device.registered_at || "—")}</strong></div>
+              <div><span>最終確認</span><strong>${escapeHtml(device.last_seen_at || "—")}</strong></div>
+            </div>
+            ${
+              device.status === "active"
+                ? `<div class="common-account-actions">
+                    <button class="button danger" type="button"
+                      data-shared-device-revoke="${escapeHtml(device.device_id)}"
+                      ${busy ? "disabled" : ""}>
+                      <i data-lucide="unlink"></i>この端末を失効
+                    </button>
+                  </div>`
+                : ""
+            }
+          </article>`
+        ).join("");
+      }
+
+      if (sharedAccountDeviceEmpty) {
+        sharedAccountDeviceEmpty.classList.toggle("is-visible", !devices.length);
+      }
+
+      if (sharedAccountDeviceMessage) {
+        sharedAccountDeviceMessage.textContent =
+          deviceState.message || "有効な端末だけ個別に失効できます。";
+      }
+
+      if (sharedAccountDeviceAdministratorPasswordInput) {
+        sharedAccountDeviceAdministratorPasswordInput.disabled = busy;
+      }
+    }
+
+    async function handleSharedDeviceRevoke(deviceId) {
+      const row = getSharedAccountRow(state.sharedAccountDevices?.accountId);
+      if (!row) return;
+
+      const administratorPassword = toText(
+        sharedAccountDeviceAdministratorPasswordInput?.value
+      );
+      if (!administratorPassword) {
+        showToast(
+          "端末を失効するには管理者自身の現在のパスワードを入力してください。"
+        );
+        sharedAccountDeviceAdministratorPasswordInput?.focus();
+        return;
+      }
+
+      const confirmed = window.confirm(
+        `${row.workplace_name || row.shared_scope_code}の端末 ${deviceId} を失効します。\n\n` +
+        "この端末は次回、共有アカウントで再ログインが必要になります。よろしいですか？"
+      );
+      if (!confirmed) return;
+
+      state.sharedAccountDevices = {
+        ...state.sharedAccountDevices,
+        status: "submitting",
+        message: "端末認証を失効しています。",
+        lastError: "",
+      };
+      renderSharedAccountDeviceModal();
+      refreshIcons();
+
+      try {
+        const result = await callEmployeeApi(
+          APP_CONFIG.apiActions.revokeWorkplaceSharedAccountDevice,
+          {
+            auth: buildCurrentAuthPayload(),
+            target_account_id: row.account_id,
+            target_login_id: row.login_id,
+            workplace_code: row.shared_scope_code,
+            device_id: deviceId,
+            administrator_password: administratorPassword,
+          }
+        );
+
+        const message = result.message || "共有端末を失効しました。";
+        await loadAccountManagementData({ silent: true, force: true });
+        state.accountManagement.activeView = "shared";
+        state.sharedAccountDevices = {
+          status: "idle",
+          accountId: row.account_id,
+          message,
+          lastError: "",
+        };
+        renderSharedAccountDeviceModal();
+        renderAccountManagementPanel();
+        refreshIcons();
+        showToast(message);
+      } catch (error) {
+        if (isDiscardedAuthContextError(error)) return;
+        const result = error.apiResult || {};
+        const message =
+          result.message ||
+          error.message ||
+          "共有端末失効に失敗しました。";
+        state.sharedAccountDevices = {
+          ...state.sharedAccountDevices,
+          status: "error",
+          message,
+          lastError: message,
+        };
+        renderSharedAccountDeviceModal();
+        showToast(message);
+      }
+    }
+
+    function handleSharedAccountAction(action, accountId) {
+      const row = getSharedAccountRow(accountId);
+      if (!row) {
+        showToast(
+          "対象店舗共有アカウントを確認できません。最新情報を再読込してください。"
+        );
+        return;
+      }
+      if (action === "devices") {
+        openSharedAccountDeviceModal(row);
+        return;
+      }
+      if (["reset", "suspend", "reactivate"].includes(action)) {
+        openSharedAccountOperationModal(action, row);
+        return;
+      }
+      showToast("未対応の店舗共有アカウント操作です。");
+    }
+
     function setAccountManagementView(view) {
-      const nextView = view === "administrator" ? "administrator" : "common";
+      const nextView = ["common", "shared", "administrator"].includes(view)
+        ? view
+        : "common";
       state.accountManagement.activeView = nextView;
       renderAccountManagementPanel();
       refreshIcons();
       window.setTimeout(() => {
         if (nextView === "common") commonAccountKeywordInput?.focus();
+        else if (nextView === "shared") sharedAccountIssueButton?.focus();
         else accountAdminTargetSelect?.focus();
       }, 0);
     }
@@ -6648,13 +7907,20 @@
       const loading = management.status === "loading";
       const resetting = management.status === "resetting";
       const busy = loading || resetting;
-      const activeView = management.activeView === "administrator" ? "administrator" : "common";
+      const activeView = ["common", "shared", "administrator"].includes(management.activeView)
+        ? management.activeView
+        : "common";
 
       if (accountManagementTabs) accountManagementTabs.hidden = !canAdminister;
       if (commonAccountsTabButton) {
         commonAccountsTabButton.classList.toggle("is-active", activeView === "common");
         commonAccountsTabButton.setAttribute("aria-selected", activeView === "common" ? "true" : "false");
         commonAccountsTabButton.disabled = !canAdminister;
+      }
+      if (sharedAccountsTabButton) {
+        sharedAccountsTabButton.classList.toggle("is-active", activeView === "shared");
+        sharedAccountsTabButton.setAttribute("aria-selected", activeView === "shared" ? "true" : "false");
+        sharedAccountsTabButton.disabled = !canAdminister;
       }
       if (administratorAccountsTabButton) {
         administratorAccountsTabButton.classList.toggle("is-active", activeView === "administrator");
@@ -6663,6 +7929,9 @@
       }
       if (commonAccountPanel) {
         commonAccountPanel.hidden = !canAdminister || activeView !== "common";
+      }
+      if (sharedAccountPanel) {
+        sharedAccountPanel.hidden = !canAdminister || activeView !== "shared";
       }
 
       if (headerAdminMenuButton) {
@@ -6685,8 +7954,18 @@
       }
 
       renderCommonAccountPanel();
+      renderSharedAccountPanel();
       if (commonAccountIssueModalBackdrop?.classList.contains("is-open")) {
         renderCommonAccountIssueModal();
+      }
+      if (sharedAccountIssueModalBackdrop?.classList.contains("is-open")) {
+        renderSharedAccountIssueModal();
+      }
+      if (sharedAccountOperationModalBackdrop?.classList.contains("is-open")) {
+        renderSharedAccountOperationModal();
+      }
+      if (sharedAccountDeviceModalBackdrop?.classList.contains("is-open")) {
+        renderSharedAccountDeviceModal();
       }
 
       const accounts = Array.isArray(management.accounts) ? management.accounts : [];
@@ -6789,6 +8068,12 @@
         orphanAccounts: Array.isArray(state.accountManagement.orphanAccounts)
           ? state.accountManagement.orphanAccounts
           : [],
+        sharedAccountRows: Array.isArray(state.accountManagement.sharedAccountRows)
+          ? state.accountManagement.sharedAccountRows
+          : [],
+        sharedWorkplaces: Array.isArray(state.accountManagement.sharedWorkplaces)
+          ? state.accountManagement.sharedWorkplaces
+          : [],
         summary: state.accountManagement.summary || {},
         integrityCheck: state.accountManagement.integrityCheck || {},
       };
@@ -6796,7 +8081,9 @@
         previous.accounts.length ||
         previous.employeeAccountRows.length ||
         previous.administratorAccounts.length ||
-        previous.orphanAccounts.length
+        previous.orphanAccounts.length ||
+        previous.sharedAccountRows.length ||
+        previous.sharedWorkplaces.length
       );
 
       state.accountManagement = {
@@ -6823,6 +8110,12 @@
           const orphanAccounts = Array.isArray(result?.data?.orphanAccounts)
             ? result.data.orphanAccounts
             : [];
+          const sharedAccountRows = Array.isArray(result?.data?.sharedAccountRows)
+            ? result.data.sharedAccountRows
+            : [];
+          const sharedWorkplaces = Array.isArray(result?.data?.sharedWorkplaces)
+            ? result.data.sharedWorkplaces
+            : [];
           const summary = result?.data?.summary && typeof result.data.summary === "object"
             ? result.data.summary
             : {};
@@ -6835,6 +8128,8 @@
             employeeAccountRows,
             administratorAccounts,
             orphanAccounts,
+            sharedAccountRows,
+            sharedWorkplaces,
             summary,
             integrityCheck,
             selectedAccountId: accounts.find((account) => account.can_reset_password)?.account_id || "",
@@ -6851,6 +8146,8 @@
             employee_account_row_count: employeeAccountRows.length,
             administrator_account_count: administratorAccounts.length,
             orphan_account_count: orphanAccounts.length,
+            shared_account_count: sharedAccountRows.length,
+            shared_workplace_count: sharedWorkplaces.length,
             integrity_status: integrityCheck.status || "",
             password_hash_returned: result?.data?.password_hash_returned === false ? "FALSE" : "未返却確認対象",
             auth_session_token_returned: result?.data?.auth_session_token_returned === false ? "FALSE" : "未返却確認対象",
@@ -6871,6 +8168,8 @@
             employeeAccountRows: hadPreviousData ? previous.employeeAccountRows : [],
             administratorAccounts: hadPreviousData ? previous.administratorAccounts : [],
             orphanAccounts: hadPreviousData ? previous.orphanAccounts : [],
+            sharedAccountRows: hadPreviousData ? previous.sharedAccountRows : [],
+            sharedWorkplaces: hadPreviousData ? previous.sharedWorkplaces : [],
             summary: hadPreviousData ? previous.summary : {},
             integrityCheck: hadPreviousData ? previous.integrityCheck : (result?.data?.integrityCheck || {}),
             selectedAccountId: hadPreviousData
@@ -7155,6 +8454,11 @@
         APP_CONFIG.apiActions.resetEmployeeCommonAccountPassword,
         APP_CONFIG.apiActions.suspendEmployeeCommonAccount,
         APP_CONFIG.apiActions.reactivateEmployeeCommonAccount,
+        APP_CONFIG.apiActions.createWorkplaceSharedAccount,
+        APP_CONFIG.apiActions.resetWorkplaceSharedAccountPassword,
+        APP_CONFIG.apiActions.suspendWorkplaceSharedAccount,
+        APP_CONFIG.apiActions.reactivateWorkplaceSharedAccount,
+        APP_CONFIG.apiActions.revokeWorkplaceSharedAccountDevice,
       ].includes(action);
     }
 
@@ -9980,8 +11284,115 @@
       if (commonAccountsTabButton) {
         commonAccountsTabButton.addEventListener("click", () => setAccountManagementView("common"));
       }
+      if (sharedAccountsTabButton) {
+        sharedAccountsTabButton.addEventListener("click", () => setAccountManagementView("shared"));
+      }
       if (administratorAccountsTabButton) {
         administratorAccountsTabButton.addEventListener("click", () => setAccountManagementView("administrator"));
+      }
+      if (sharedAccountIssueButton) {
+        sharedAccountIssueButton.addEventListener("click", openSharedAccountIssueModal);
+      }
+      if (sharedAccountReloadButton) {
+        sharedAccountReloadButton.addEventListener("click", () => loadAccountManagementData({ force: true }));
+      }
+      [sharedAccountTableBody, sharedAccountMobileList].filter(Boolean).forEach((container) => {
+        container.addEventListener("click", (event) => {
+          const button = event.target.closest("[data-shared-account-action]");
+          if (!button) return;
+          handleSharedAccountAction(
+            button.dataset.sharedAccountAction,
+            button.dataset.accountId
+          );
+        });
+      });
+      if (sharedAccountIssueWorkplaceSelect) {
+        sharedAccountIssueWorkplaceSelect.addEventListener("change", applySharedWorkplaceDefaults);
+      }
+      if (sharedAccountIssueSubmitButton) {
+        sharedAccountIssueSubmitButton.addEventListener("click", handleSharedAccountIssueSubmit);
+      }
+      if (sharedAccountIssueClearButton) {
+        sharedAccountIssueClearButton.addEventListener("click", () => {
+          [
+            sharedAccountIssueAccountNameInput,
+            sharedAccountIssueLoginIdInput,
+            sharedAccountIssueAdministratorPasswordInput,
+            sharedAccountIssuePasswordInput,
+            sharedAccountIssuePasswordConfirmInput,
+          ].filter(Boolean).forEach((input) => { input.value = ""; });
+          if (sharedAccountIssueWorkplaceSelect) sharedAccountIssueWorkplaceSelect.value = "";
+          state.sharedAccountIssue = {
+            ...state.sharedAccountIssue,
+            status: "idle",
+            message: "発行入力をクリアしました。",
+            lastError: "",
+          };
+          renderSharedAccountIssueModal();
+          refreshIcons();
+        });
+      }
+      [closeSharedAccountIssueModalButton, cancelSharedAccountIssueModalButton].filter(Boolean).forEach((button) => {
+        button.addEventListener("click", closeSharedAccountIssueModal);
+      });
+      if (sharedAccountIssuePasswordConfirmInput) {
+        sharedAccountIssuePasswordConfirmInput.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            handleSharedAccountIssueSubmit();
+          }
+        });
+      }
+
+      if (sharedAccountOperationSubmitButton) {
+        sharedAccountOperationSubmitButton.addEventListener("click", handleSharedAccountOperationSubmit);
+      }
+      if (sharedAccountOperationClearButton) {
+        sharedAccountOperationClearButton.addEventListener("click", () => {
+          [
+            sharedAccountOperationAdministratorPasswordInput,
+            sharedAccountOperationPasswordInput,
+            sharedAccountOperationPasswordConfirmInput,
+          ].filter(Boolean).forEach((input) => { input.value = ""; });
+          state.sharedAccountOperation = {
+            ...state.sharedAccountOperation,
+            status: "idle",
+            message: "入力をクリアしました。対象と操作内容を確認してください。",
+            lastError: "",
+          };
+          renderSharedAccountOperationModal();
+          refreshIcons();
+        });
+      }
+      [closeSharedAccountOperationModalButton, cancelSharedAccountOperationModalButton].filter(Boolean).forEach((button) => {
+        button.addEventListener("click", closeSharedAccountOperationModal);
+      });
+      if (sharedAccountOperationPasswordConfirmInput) {
+        sharedAccountOperationPasswordConfirmInput.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" && state.sharedAccountOperation?.action === "reset") {
+            event.preventDefault();
+            handleSharedAccountOperationSubmit();
+          }
+        });
+      }
+      if (sharedAccountOperationAdministratorPasswordInput) {
+        sharedAccountOperationAdministratorPasswordInput.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" && ["suspend", "reactivate"].includes(state.sharedAccountOperation?.action)) {
+            event.preventDefault();
+            handleSharedAccountOperationSubmit();
+          }
+        });
+      }
+
+      [closeSharedAccountDeviceModalButton, cancelSharedAccountDeviceModalButton].filter(Boolean).forEach((button) => {
+        button.addEventListener("click", closeSharedAccountDeviceModal);
+      });
+      if (sharedAccountDeviceList) {
+        sharedAccountDeviceList.addEventListener("click", (event) => {
+          const button = event.target.closest("[data-shared-device-revoke]");
+          if (!button) return;
+          handleSharedDeviceRevoke(button.dataset.sharedDeviceRevoke);
+        });
       }
       if (commonAccountKeywordInput) {
         commonAccountKeywordInput.addEventListener("input", (event) => {
@@ -10246,6 +11657,28 @@
         });
       }
 
+      if (sharedAccountIssueModalBackdrop) {
+        sharedAccountIssueModalBackdrop.addEventListener("click", (event) => {
+          if (event.target === sharedAccountIssueModalBackdrop) {
+            closeSharedAccountIssueModal();
+          }
+        });
+      }
+      if (sharedAccountOperationModalBackdrop) {
+        sharedAccountOperationModalBackdrop.addEventListener("click", (event) => {
+          if (event.target === sharedAccountOperationModalBackdrop) {
+            closeSharedAccountOperationModal();
+          }
+        });
+      }
+      if (sharedAccountDeviceModalBackdrop) {
+        sharedAccountDeviceModalBackdrop.addEventListener("click", (event) => {
+          if (event.target === sharedAccountDeviceModalBackdrop) {
+            closeSharedAccountDeviceModal();
+          }
+        });
+      }
+
       detailModalBackdrop.addEventListener("click", (event) => {
         if (event.target === detailModalBackdrop) {
           closeDetail();
@@ -10272,6 +11705,21 @@
 
       document.addEventListener("keydown", (event) => {
         if (event.key !== "Escape") return;
+
+        if (sharedAccountDeviceModalBackdrop?.classList.contains("is-open")) {
+          closeSharedAccountDeviceModal();
+          return;
+        }
+
+        if (sharedAccountOperationModalBackdrop?.classList.contains("is-open")) {
+          closeSharedAccountOperationModal();
+          return;
+        }
+
+        if (sharedAccountIssueModalBackdrop?.classList.contains("is-open")) {
+          closeSharedAccountIssueModal();
+          return;
+        }
 
         if (commonAccountOperationModalBackdrop?.classList.contains("is-open")) {
           closeCommonAccountOperationModal();
