@@ -1,4 +1,12 @@
 <!--
+  梅園共通アカウント設定 v1.9-2_work 現行認証案内文言整理
+  - v1.9 complete は固定保管版として直接編集せず、コピーしてwork版を作成。
+  - 通常利用は社員番号＋設定済みパスワード、管理者手動発行・再初期化時は案内されたログインID／仮パスワードを使うことが分かる表現へ整理。
+  - ログイン入力欄の表示名を「社員番号／ログインID」へ変更。内部送信キー login_id と認証処理は変更しない。
+  - must_change_password 時の案内を、初回発行・再初期化のどちらにも合う「新しいパスワードを設定」表現へ整理。
+  - GAS・DB・API・認証方式・セッション・ポータル側処理は変更しない。
+-->
+<!--
   梅園共通アカウント設定 v1.9 complete 固定化
   - v1.8 complete の実機確認済み画面機能をそのまま継続し、v1.9 complete の固定一式へ版表記のみ合わせる。
   - 初回パスワード設定・通常パスワード変更の処理変更なし。
@@ -18,7 +26,7 @@
 -->
 <!DOCTYPE html>
 <!--
-  梅園共通アカウント設定 v1.9_complete
+  梅園共通アカウント設定 v1.9-2_work
   社員本人用共通アカウントの初回パスワード設定・通常パスワード変更専用画面。
   社員一覧、個人情報、他社員情報、アプリ権限編集、社員マスタ管理機能は取得・表示しない。
 -->
@@ -115,7 +123,7 @@
         <div class="brand-icon"><i data-lucide="key-round"></i></div>
         <div>
           <h1>梅園共通アカウント設定</h1>
-          <p class="subtitle">初回設定・パスワード変更専用</p>
+          <p class="subtitle">パスワード設定・変更専用</p>
         </div>
       </div>
       <a class="portal-link" href="https://umezono-systems.github.io/umezono-portal/">
@@ -127,11 +135,11 @@
       <div class="panel-head">
         <div class="panel-icon"><i data-lucide="log-in"></i></div>
         <h2>共通アカウントへログイン</h2>
-        <p class="note">管理者から案内されたログインIDと仮パスワードを入力してください。</p>
+        <p class="note">通常は社員番号と設定済みパスワードでログインします。管理者からログインIDや仮パスワードの案内を受けた場合は、案内された内容を入力してください。</p>
       </div>
       <form id="loginForm" class="grid" novalidate>
         <div class="field">
-          <label for="loginId">ログインID</label>
+          <label for="loginId">社員番号／ログインID</label>
           <input id="loginId" name="login_id" autocomplete="username" inputmode="text" required>
         </div>
         <div class="field">
@@ -179,13 +187,13 @@
       <p id="accountMessage" class="message" aria-live="polite"></p>
     </section>
 
-    <p class="version">v1.9_complete</p>
+    <p class="version">v1.9-2_work</p>
   </main>
 
   <script>
     "use strict";
     const APP_CONFIG = {
-      version: "v1.9_complete",
+      version: "v1.9-2_work",
       gasEndpoint: "https://script.google.com/macros/s/AKfycbxOY4thFjX4f43TxXNaCGlh5_HXpgP70xZGyyq9sCemUgNSWCmnMt_8-q2EB1tgLsUMHg/exec",
       apiTimeoutMs: 30000,
       sessionValidationIntervalMs: 15 * 60 * 1000,
@@ -289,15 +297,15 @@
       el.identityEmployeeNo.textContent = auth.employee_no || "-";
       el.identityLoginId.textContent = auth.login_id || "-";
       const first = Boolean(auth.must_change_password);
-      el.accountPanelTitle.textContent = first ? "初回パスワード設定" : "共通アカウント設定済み";
+      el.accountPanelTitle.textContent = first ? "新しいパスワードを設定" : "共通アカウント設定済み";
       el.accountPanelNote.textContent = first
-        ? "仮パスワードから、ご本人だけが分かる新しいパスワードへ変更してください。"
+        ? "管理者から案内された仮パスワードでログインしています。ご本人だけが分かる新しいパスワードを設定してください。"
         : "現在のパスワードを確認して、新しいパスワードへ変更できます。";
       el.accountStatusBox.className = `status-box ${first ? "warning" : "success"}`;
       el.accountStatusBox.textContent = first
-        ? "初回設定が完了するまで、梅園レシピ帳などの共通アカウント利用は開始できません。"
-        : "共通アカウントのパスワードは設定済みです。利用できるアプリは、各アプリ側で登録された権限によって決まります。";
-      el.passwordButton.innerHTML = `<i data-lucide="key-round"></i>${first ? "初回パスワードを設定" : "パスワードを変更"}`;
+        ? "新しいパスワードを設定するまで、共通アカウントを使う社内アプリへのログインは完了しません。"
+        : "共通アカウントのパスワードは設定済みです。共通アカウント対応の社内アプリで利用できます。";
+      el.passwordButton.innerHTML = `<i data-lucide="key-round"></i>${first ? "新しいパスワードを設定" : "パスワードを変更"}`;
       refreshIcons();
     }
     function resetToLogin(message = "", type = "") {
@@ -334,7 +342,7 @@
       if (state.busy) return;
       const loginId = el.loginId.value.trim();
       const password = el.loginPassword.value;
-      if (!loginId || !password) { setMessage(el.loginMessage, "ログインIDとパスワードを入力してください。", "error"); return; }
+      if (!loginId || !password) { setMessage(el.loginMessage, "社員番号／ログインIDとパスワードを入力してください。", "error"); return; }
       state.busy = true;
       setButtonBusy(el.loginButton, true, "確認中");
       setMessage(el.loginMessage, "アカウントを確認しています。", "info");
